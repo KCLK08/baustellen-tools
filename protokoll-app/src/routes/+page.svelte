@@ -64,6 +64,9 @@
   let editingColIndex = null;
   let editColName = '';
   let editColType = 'text';
+  let touchDragIndex = null;
+  let touchDragging = false;
+  let touchTimer = null;
 
   let protocolsList = [];
   let exportsList = [];
@@ -304,6 +307,34 @@
     editingColIndex = null;
     editColName = '';
     editColType = 'text';
+  };
+
+  const startTouchDrag = (idx) => {
+    clearTimeout(touchTimer);
+    touchDragIndex = idx;
+    touchTimer = setTimeout(() => {
+      touchDragging = true;
+    }, 250);
+  };
+
+  const moveTouchDrag = (event) => {
+    if (!touchDragging) return;
+    event.preventDefault();
+    const touch = event.touches?.[0];
+    if (!touch) return;
+    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+    const card = target?.closest?.('.col-card');
+    if (!card) return;
+    const idx = Number(card.dataset.index);
+    if (Number.isNaN(idx)) return;
+    reorderColumns(touchDragIndex, idx);
+    touchDragIndex = idx;
+  };
+
+  const endTouchDrag = () => {
+    clearTimeout(touchTimer);
+    touchDragging = false;
+    touchDragIndex = null;
   };
 
   const startProtocol = async () => {
@@ -973,8 +1004,10 @@
           {#each columns as col, idx}
             <div
               class:dragging={dragIndex === idx}
+              class:touch-dragging={touchDragging}
               class="col-card"
               draggable="true"
+              data-index={idx}
               on:dragstart={() => (dragIndex = idx)}
               on:dragend={() => (dragIndex = null)}
               on:dragover|preventDefault
@@ -982,6 +1015,10 @@
                 reorderColumns(dragIndex, idx);
                 dragIndex = null;
               }}
+              on:touchstart={() => startTouchDrag(idx)}
+              on:touchmove|preventDefault={moveTouchDrag}
+              on:touchend={endTouchDrag}
+              on:touchcancel={endTouchDrag}
             >
               <span class="drag-handle" aria-hidden="true">⋮⋮</span>
               {#if editingColIndex === idx}
@@ -1481,6 +1518,10 @@
     opacity: 0.6;
     border-style: solid;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  }
+
+  .col-card.touch-dragging {
+    touch-action: none;
   }
 
   .drag-handle {
