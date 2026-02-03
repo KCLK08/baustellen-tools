@@ -665,7 +665,7 @@
           Neues Protokoll starten
         </button>
       </div>
-      <div class="cta-row">
+      <div class="cta-row split">
         <button type="button" on:click={goToProtocols}>Protokolle anzeigen</button>
         <button type="button" on:click={goToExports}>Exports anzeigen</button>
       </div>
@@ -1204,6 +1204,15 @@
     gap: 12px;
     flex-wrap: wrap;
     margin: 12px 0 18px;
+  }
+
+  .cta-row.split {
+    width: 100%;
+    flex-wrap: nowrap;
+  }
+
+  .cta-row.split > button {
+    flex: 1 1 0;
   }
 
   .grid {
