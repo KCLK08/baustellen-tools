@@ -385,28 +385,30 @@
     };
   };
 
-  let lockedScrollY = 0;
+  let scrollLock = { active: false, y: 0 };
   $: if (typeof document !== 'undefined') {
-    if (dragState.active) {
-      lockedScrollY = window.scrollY || 0;
+    if (dragState.active && !scrollLock.active) {
+      scrollLock = { active: true, y: window.scrollY || 0 };
       document.body.style.position = 'fixed';
-      document.body.style.top = `-${lockedScrollY}px`;
+      document.body.style.top = `-${scrollLock.y}px`;
       document.body.style.left = '0';
       document.body.style.right = '0';
       document.body.style.overflow = 'hidden';
       document.body.style.touchAction = 'none';
-    } else {
-      const restoreY = lockedScrollY;
+      document.documentElement.style.overflow = 'hidden';
+      document.documentElement.style.touchAction = 'none';
+    } else if (!dragState.active && scrollLock.active) {
+      const restoreY = scrollLock.y;
       document.body.style.position = '';
       document.body.style.top = '';
       document.body.style.left = '';
       document.body.style.right = '';
       document.body.style.overflow = '';
       document.body.style.touchAction = '';
-      if (restoreY) {
-        window.scrollTo(0, restoreY);
-      }
-      lockedScrollY = 0;
+      document.documentElement.style.overflow = '';
+      document.documentElement.style.touchAction = '';
+      window.scrollTo(0, restoreY);
+      scrollLock = { active: false, y: 0 };
     }
   }
 
