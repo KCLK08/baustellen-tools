@@ -1,6 +1,6 @@
 {
-  "name": "Tools für Bauüberwacher",
-  "short_name": "Bau Tools",
+  "name": "BÜW Toolbox",
+  "short_name": "BÜW Toolbox",
   "start_url": "/baustellen-tools/",
   "scope": "/baustellen-tools/",
   "display": "standalone",
