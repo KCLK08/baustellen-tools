@@ -6,45 +6,92 @@
     <title>Tools für Bauüberwacher</title>
     <style>
       :root {
-        --bg: #f6f3ee;
-        --ink: #151515;
-        --muted: #6a625a;
-        --accent: #e07a5f;
-        --panel: #fffdf9;
-        --border: #e7dfd5;
+        --bg: #f3efe7;
+        --ink: #161614;
+        --muted: #5f5a52;
+        --accent: #d3543c;
+        --accent-2: #1d2b36;
+        --panel: #fffaf2;
+        --border: #e6ddcf;
+        --glow: rgba(211, 84, 60, 0.22);
       }
       body {
         margin: 0;
-        font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
-        background: radial-gradient(1200px 800px at 10% -10%, #fdebd2 0%, transparent 60%),
-          radial-gradient(900px 700px at 100% 0%, #dbe7f6 0%, transparent 55%),
-          var(--bg);
+        font-family: "Space Grotesk", "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+        background:
+          radial-gradient(900px 600px at 10% -10%, #fbe3c6 0%, transparent 60%),
+          radial-gradient(700px 600px at 90% 0%, #cfe2f5 0%, transparent 55%),
+          linear-gradient(180deg, #f9f2e7 0%, #f3efe7 100%);
         color: var(--ink);
       }
       .page {
-        max-width: 980px;
+        max-width: 1100px;
         margin: 0 auto;
-        padding: 40px 20px 80px;
+        padding: 48px 20px 96px;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 24px;
+        align-items: center;
+        margin-bottom: 36px;
       }
       h1 {
         margin: 0 0 12px;
+        font-size: clamp(32px, 5vw, 52px);
+        letter-spacing: -0.02em;
       }
       .sub {
         color: var(--muted);
         margin: 0 0 24px;
+        font-size: 16px;
+        line-height: 1.5;
+      }
+      .hero-card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 18px;
+        box-shadow: 0 20px 40px rgba(23, 21, 18, 0.1);
+      }
+      .hero-card h3 {
+        margin: 0 0 6px;
+        font-size: 18px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #fff;
+        border: 1px solid var(--border);
+        color: var(--accent-2);
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
       }
       .grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 18px;
       }
       .card {
         background: var(--panel);
         border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 16px;
-        box-shadow: 0 12px 30px rgba(23, 21, 18, 0.08);
-        transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+        border-radius: 18px;
+        padding: 18px;
+        box-shadow: 0 14px 30px rgba(23, 21, 18, 0.08);
+        transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+        position: relative;
+        overflow: hidden;
+      }
+      .card::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(240px 140px at 85% -10%, var(--glow), transparent 60%);
+        opacity: 0;
+        transition: opacity 160ms ease;
       }
       .card-link {
         display: block;
@@ -53,38 +100,98 @@
       }
       .card-link:hover .card,
       .card-link:focus .card {
-        transform: translateY(-2px);
+        transform: translateY(-4px);
         border-color: var(--accent);
-        box-shadow: 0 18px 38px rgba(23, 21, 18, 0.14);
+        box-shadow: 0 22px 48px rgba(23, 21, 18, 0.14);
+      }
+      .card-link:hover .card::after,
+      .card-link:focus .card::after {
+        opacity: 1;
       }
       .card-link:focus {
         outline: 2px solid var(--accent);
-        outline-offset: 4px;
-        border-radius: 16px;
+        outline-offset: 6px;
+        border-radius: 20px;
+      }
+      .card h2 {
+        margin: 0 0 8px;
+      }
+      .card-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+      .icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        color: white;
+        font-size: 14px;
+        letter-spacing: 0.02em;
+      }
+      .icon.protokoll {
+        background: linear-gradient(135deg, #d3543c, #f2b179);
+      }
+      .icon.tool2 {
+        background: linear-gradient(135deg, #1d2b36, #4b6b7a);
+      }
+      .icon.tool3 {
+        background: linear-gradient(135deg, #3b3a2f, #7a744f);
+      }
+      .card p {
+        margin: 0;
+        color: var(--muted);
+      }
+      @media (max-width: 840px) {
+        .hero {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
   <body>
     <div class="page">
-      <h1>Tools für Bauüberwacher</h1>
-      <p class="sub">Sammlung interner Tools für Baustellen‑Dokumentation.</p>
+      <div class="hero">
+        <div>
+          <div class="pill">Interne Toolbox</div>
+          <h1>Tools für Bauüberwacher</h1>
+          <p class="sub">Zentrale Übersicht für digitale Baustellen‑Workflows und Dokumentation.</p>
+        </div>
+        <div class="hero-card">
+          <h3>Aktueller Fokus</h3>
+          <p class="sub">Protokoll App für Foto‑basierte Vorgänge, Export und Nachbearbeitung.</p>
+        </div>
+      </div>
 
       <div class="grid">
         <a class="card-link" href="/baustellen-tools/protokoll-app/">
           <div class="card">
-            <h2>Protokoll App</h2>
+            <div class="card-header">
+              <div class="icon protokoll">PA</div>
+              <h2>Protokoll App</h2>
+            </div>
             <p>Foto‑basierte Protokolle mit XLSX‑Export.</p>
           </div>
         </a>
         <a class="card-link" href="/baustellen-tools/tool-platzhalter-2/">
           <div class="card">
-            <h2>Tool 2</h2>
+            <div class="card-header">
+              <div class="icon tool2">T2</div>
+              <h2>Tool 2</h2>
+            </div>
             <p>Demnächst verfügbar.</p>
           </div>
         </a>
         <a class="card-link" href="/baustellen-tools/tool-platzhalter-3/">
           <div class="card">
-            <h2>Tool 3</h2>
+            <div class="card-header">
+              <div class="icon tool3">T3</div>
+              <h2>Tool 3</h2>
+            </div>
             <p>Demnächst verfügbar.</p>
           </div>
         </a>
