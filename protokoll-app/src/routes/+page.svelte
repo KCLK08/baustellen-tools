@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { base } from '$app/paths';
   import { version as appVersion } from '$app/environment';
+  import { flip } from 'svelte/animate';
   import {
     addEntry,
     listEntries,
@@ -1008,6 +1009,7 @@
               class="col-card"
               draggable="true"
               data-index={idx}
+              animate:flip={{ duration: 180 }}
               on:dragstart={() => (dragIndex = idx)}
               on:dragend={() => (dragIndex = null)}
               on:dragover|preventDefault
@@ -1508,6 +1510,7 @@
     gap: 8px;
     cursor: grab;
     position: relative;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
   }
 
   .col-card:active {
