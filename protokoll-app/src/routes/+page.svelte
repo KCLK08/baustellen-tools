@@ -1002,7 +1002,7 @@
       <div class="section">
         <h3>Spalten definieren</h3>
         <div class="columns">
-          {#each columns as col, idx}
+          {#each columns as col, idx (col.name)}
             <div
               class:dragging={dragIndex === idx}
               class:touch-dragging={touchDragging}
