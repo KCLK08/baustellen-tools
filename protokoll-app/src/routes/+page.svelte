@@ -57,6 +57,9 @@
   let templateName = '';
   let isCreatingFormat = false;
   let isEditingFormat = false;
+  let formatMode = 'new';
+  let formatReturnView = 'start';
+  let formatBackup = null;
 
   let protocolsList = [];
   let exportsList = [];
@@ -198,22 +201,38 @@
     isCreatingFormat = false;
     isEditingFormat = false;
     isDirty = true;
+    formatBackup = null;
+    view = formatReturnView;
   };
 
   const startNewFormat = () => {
+    formatReturnView = view;
+    formatBackup = {
+      columns: columns.map((c) => ({ ...c })),
+      selectedTemplateId
+    };
     isCreatingFormat = true;
     isEditingFormat = false;
+    formatMode = 'new';
     selectedTemplateId = '';
     templateName = '';
     columns = [defaultColumns[0]];
     newColName = '';
     newColType = 'text';
+    view = 'format-builder';
   };
 
   const startEditFormat = () => {
     if (!selectedTemplateId) return;
+    formatReturnView = view;
+    formatBackup = {
+      columns: columns.map((c) => ({ ...c })),
+      selectedTemplateId
+    };
     isEditingFormat = true;
     isCreatingFormat = false;
+    formatMode = 'edit';
+    view = 'format-builder';
   };
 
   const saveEditedFormat = async () => {
@@ -229,6 +248,19 @@
     isEditingFormat = false;
     persistSettings();
     isDirty = true;
+    formatBackup = null;
+    view = formatReturnView;
+  };
+
+  const cancelFormatEdit = () => {
+    if (formatBackup) {
+      columns = formatBackup.columns.map((c) => ({ ...c }));
+      selectedTemplateId = formatBackup.selectedTemplateId;
+    }
+    isCreatingFormat = false;
+    isEditingFormat = false;
+    formatBackup = null;
+    view = formatReturnView;
   };
 
   const startProtocol = async () => {
@@ -830,45 +862,36 @@
             <button type="button" on:click={startNewFormat}>Neues Format anlegen</button>
           </div>
         </div>
-        {#if isCreatingFormat || isEditingFormat}
-          <div class="section">
-            <h4>Spalten definieren</h4>
-            <div class="columns">
-              {#each columns as col}
-                <div class="col-card">
-                  <div class="col-title">{col.name}</div>
-                  <div class="col-meta">Typ: {col.type}</div>
-                  {#if !col.isPhoto}
-                    <button type="button" on:click={() => removeColumn(col.name)}>Spalte entfernen</button>
-                  {:else}
-                    <span class="photo-pill">Foto-Spalte</span>
-                  {/if}
-                </div>
-              {/each}
+        {#if selectedTemplateId}
+          <div class="format-preview">
+            <div class="muted">Tabellenvorschau</div>
+            <div class="table-preview">
+              <table>
+                <thead>
+                  <tr>
+                    {#each columns as col}
+                      <th>{col.name}</th>
+                    {/each}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    {#each columns as col}
+                      <td class:cell-number={col.type === 'number'}>
+                        {#if col.isPhoto}
+                          Foto
+                        {:else if col.type === 'number'}
+                          123
+                        {:else}
+                          Beispiel
+                        {/if}
+                      </td>
+                    {/each}
+                  </tr>
+                </tbody>
+              </table>
             </div>
-
-            <div class="add-row">
-              <input bind:value={newColName} placeholder="Spaltenname" />
-              <select bind:value={newColType}>
-                <option value="text">Text</option>
-                <option value="number">Zahl</option>
-              </select>
-              <button type="button" on:click={addColumn}>Spalte hinzufügen</button>
-            </div>
-
-            {#if isCreatingFormat}
-              <div class="inline">
-                <input bind:value={templateName} placeholder="Formatname" />
-                <button type="button" on:click={saveTemplate}>Format speichern</button>
-              </div>
-            {:else}
-              <div class="inline">
-                <button type="button" on:click={saveEditedFormat}>Änderungen speichern</button>
-                <button type="button" on:click={() => (isEditingFormat = false)}>Abbrechen</button>
-              </div>
-            {/if}
           </div>
-        {:else if selectedTemplateId}
           <div class="cta-row">
             <button type="button" on:click={startEditFormat}>Format bearbeiten</button>
           </div>
@@ -882,6 +905,58 @@
         {:else}
           <button class="primary full-width" type="button" on:click={startProtocol}>Protokoll starten</button>
         {/if}
+      </div>
+    </section>
+  {/if}
+
+  {#if view === 'format-builder'}
+    <section class="panel">
+      <h2>{formatMode === 'edit' ? 'Format bearbeiten' : 'Neues Tabellenformat'}</h2>
+      <p class="muted">
+        Lege fest, welche Informationen pro Eintrag abgefragt werden. Die Foto-Spalte ist immer dabei und wird automatisch
+        in die Excel übernommen.
+      </p>
+
+      {#if formatMode === 'new'}
+        <label class="field">
+          <span>Formatname</span>
+          <input bind:value={templateName} placeholder="z. B. Standard Baustelle" />
+        </label>
+      {/if}
+
+      <div class="section">
+        <h3>Spalten definieren</h3>
+        <div class="columns">
+          {#each columns as col}
+            <div class="col-card">
+              <div class="col-title">{col.name}</div>
+              <div class="col-meta">Typ: {col.type}</div>
+              {#if !col.isPhoto}
+                <button type="button" on:click={() => removeColumn(col.name)}>Spalte entfernen</button>
+              {:else}
+                <span class="photo-pill">Foto-Spalte</span>
+              {/if}
+            </div>
+          {/each}
+        </div>
+
+        <div class="add-row">
+          <input bind:value={newColName} placeholder="Spaltenname" />
+          <select bind:value={newColType}>
+            <option value="text">Text</option>
+            <option value="number">Zahl</option>
+          </select>
+          <button type="button" on:click={addColumn}>Spalte hinzufügen</button>
+        </div>
+      </div>
+
+      <div class="cta-row">
+        {#if formatMode === 'edit'}
+          <button class="primary" type="button" on:click={saveEditedFormat}>Änderungen speichern</button>
+        {:else}
+          <button class="primary" type="button" on:click={saveTemplate}>Format speichern</button>
+        {/if}
+        <button type="button" on:click={cancelFormatEdit}>Abbrechen</button>
       </div>
     </section>
   {/if}
@@ -1342,6 +1417,57 @@
     color: var(--accent-2);
     font-size: 12px;
     font-weight: 600;
+  }
+
+  .format-preview {
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #fff;
+  }
+
+  .table-preview {
+    margin-top: 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #faf7f2;
+  }
+
+  .table-preview table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .table-preview th,
+  .table-preview td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    text-align: left;
+  }
+
+  .table-preview th:last-child,
+  .table-preview td:last-child {
+    border-right: none;
+  }
+
+  .table-preview thead th {
+    background: #f1ede7;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 11px;
+  }
+
+  .table-preview tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .cell-number {
+    text-align: center;
   }
 
   .add-row {
