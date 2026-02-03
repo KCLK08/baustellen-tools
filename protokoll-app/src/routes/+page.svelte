@@ -326,7 +326,7 @@
     if (editingColIndex === idx) return;
     if (event.button !== undefined && event.button !== 0) return;
     const target = event.target;
-    if (target?.closest?.('button, input, select, textarea')) return;
+    if (target?.closest?.('button, input, select, textarea') && !target?.closest?.('.drag-handle')) return;
     const rect = event.currentTarget.getBoundingClientRect();
     dragState = {
       active: true,
@@ -1125,10 +1125,7 @@
                 class="drag-handle"
                 type="button"
                 aria-label="Spalte verschieben"
-                on:pointerdown={(event) => {
-                  event.preventDefault();
-                  startPointerDrag(event, idx);
-                }}
+                on:pointerdown|preventDefault={(event) => startPointerDrag(event, idx)}
               >
                 ⋮⋮
               </button>
@@ -1675,6 +1672,7 @@
     padding: 0;
     line-height: 1;
     cursor: grab;
+    touch-action: none;
   }
 
   .drag-handle.ghost {
