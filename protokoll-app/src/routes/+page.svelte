@@ -1431,7 +1431,8 @@
     margin-top: 10px;
     border: 1px solid var(--border);
     border-radius: 10px;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
     background: #faf7f2;
   }
 
@@ -1439,6 +1440,7 @@
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
+    min-width: max-content;
   }
 
   .table-preview th,
