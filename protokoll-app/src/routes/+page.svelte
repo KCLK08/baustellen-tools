@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { base } from '$app/paths';
   import { version as appVersion } from '$app/environment';
   import {
@@ -54,6 +54,8 @@
   let editingEntryId = null;
 
   let stepIndex = 0;
+  let entrySteps = [];
+  let entryInputRef;
 
   let templates = [];
   let selectedTemplateId = '';
@@ -461,11 +463,15 @@
     editingEntryId = null;
     entryDraft = { fields: {}, photoFile: null, photoPreview: '' };
     stepIndex = 0;
-    if (!columns.length) {
+    entrySteps = columns.map((c) => ({ ...c }));
+    if (!entrySteps.length) {
       finalizeEntry();
       return;
     }
-    view = columns[0].isPhoto ? 'photo' : 'field';
+    view = entrySteps[0].isPhoto ? 'photo' : 'field';
+    if (view === 'field') {
+      tick().then(() => entryInputRef?.focus());
+    }
   };
 
   const editEntry = (entry) => {
@@ -476,11 +482,15 @@
       photoPreview: entry.photoPreview ?? ''
     };
     stepIndex = 0;
-    if (!columns.length) {
+    entrySteps = columns.map((c) => ({ ...c }));
+    if (!entrySteps.length) {
       finalizeEntry();
       return;
     }
-    view = columns[0].isPhoto ? 'photo' : 'field';
+    view = entrySteps[0].isPhoto ? 'photo' : 'field';
+    if (view === 'field') {
+      tick().then(() => entryInputRef?.focus());
+    }
   };
 
   const removeEntryItem = async (entryId) => {
@@ -499,16 +509,19 @@
     await goNextStep();
   };
 
-  const currentStep = () => columns[stepIndex];
+  const currentStep = () => entrySteps[stepIndex];
 
   const goToStep = (idx) => {
     stepIndex = idx;
-    const col = columns[idx];
+    const col = entrySteps[idx];
     view = col?.isPhoto ? 'photo' : 'field';
+    if (view === 'field') {
+      tick().then(() => entryInputRef?.focus());
+    }
   };
 
   const goNextStep = async () => {
-    if (stepIndex < columns.length - 1) {
+    if (stepIndex < entrySteps.length - 1) {
       goToStep(stepIndex + 1);
     } else {
       await finalizeEntry();
@@ -557,6 +570,7 @@
       entryDraft = { fields: {}, photoFile: null, photoPreview: '' };
       editingEntryId = null;
       stepIndex = 0;
+      entrySteps = [];
       view = 'main';
     } catch (err) {
       saveError = 'Speichern fehlgeschlagen. Bitte erneut versuchen.';
@@ -1304,7 +1318,7 @@
         <button type="button" on:click={goPrevStep} disabled={stepIndex === 0}>Zurück</button>
         <button type="button" on:click={() => (view = 'main')}>Abbrechen</button>
         <button class="primary" type="button" on:click={goNextStep}>
-          {stepIndex < columns.length - 1 ? 'Weiter' : 'Speichern'}
+          {stepIndex < entrySteps.length - 1 ? 'Weiter' : 'Speichern'}
         </button>
       </div>
     </section>
@@ -1322,6 +1336,7 @@
               placeholder={currentStep().name}
               bind:value={entryDraft.fields[currentStep().name]}
               on:input={() => (isDirty = true)}
+              bind:this={entryInputRef}
             />
           {:else}
             <input
@@ -1329,6 +1344,7 @@
               placeholder={currentStep().name}
               bind:value={entryDraft.fields[currentStep().name]}
               on:input={() => (isDirty = true)}
+              bind:this={entryInputRef}
             />
           {/if}
         </label>
@@ -1338,7 +1354,7 @@
         <button type="button" on:click={goPrevStep} disabled={stepIndex === 0}>Zurück</button>
         <button type="button" on:click={() => (view = 'main')}>Abbrechen</button>
         <button class="primary" type="button" disabled={isSaving} on:click={goNextStep}>
-          {stepIndex < columns.length - 1 ? 'Weiter' : 'Speichern'}
+          {stepIndex < entrySteps.length - 1 ? 'Weiter' : 'Speichern'}
         </button>
       </div>
       {#if saveError}
