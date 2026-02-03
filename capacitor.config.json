@@ -1,0 +1,6 @@
+{
+  "appId": "com.buew.protokollapp",
+  "appName": "Protokoll App",
+  "webDir": "build",
+  "bundledWebRuntime": false
+}
