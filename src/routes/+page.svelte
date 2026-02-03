@@ -26,7 +26,7 @@
 
   let view = 'start';
 
-  let projectName = 'Baustellen-Protokoll';
+  let projectName = '';
   let protocolDate = today();
   let protocolDescription = '';
 
@@ -290,7 +290,7 @@
     view = 'start';
   };
 
-  const downloadExport = (exp) => {
+  const downloadExport = async (exp) => {
     if (!exp?.base64) {
       downloadError = 'Download nicht verfügbar.';
       return;
@@ -301,12 +301,23 @@
       bytes[i] = byteString.charCodeAt(i);
     }
     const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const filename = exp.filename || 'protokoll.xlsx';
+
+    if (navigator?.canShare) {
+      try {
+        const file = new File([blob], filename, { type: blob.type });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: filename, text: 'Baustellen-Protokoll' });
+          return;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
     const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = exp.filename || 'protokoll.xlsx';
-    anchor.click();
-    URL.revokeObjectURL(url);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
   };
 
   const downloadAllExports = () => {
@@ -399,7 +410,7 @@
       <h2>Protokoll erstellen</h2>
       <label class="field">
         <span>Projektname</span>
-        <input bind:value={projectName} placeholder="Projektname" />
+        <input bind:value={projectName} placeholder="Trag den Projektnamen ein" />
       </label>
 
       <label class="field">

@@ -1,7 +1,8 @@
 {
   "name": "Protokoll App",
   "short_name": "Protokoll",
-  "start_url": "/",
+  "start_url": "/baustellen-tools/",
+  "scope": "/baustellen-tools/",
   "display": "standalone",
   "background_color": "#f6f3ee",
   "theme_color": "#0f172a",
