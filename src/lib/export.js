@@ -109,9 +109,10 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
 
     if (photoColIndex && entry.photoBlob) {
       const dataUrl = await blobToDataUrl(entry.photoBlob);
+      const base64 = stripDataUrlPrefix(dataUrl);
       const extension = getImageExtension(entry.photoBlob.type);
       const imageId = workbook.addImage({
-        base64: dataUrl,
+        base64,
         extension
       });
 
@@ -159,5 +160,11 @@ function getImageExtension(mime) {
   if (!mime) return 'jpeg';
   if (mime.includes('png')) return 'png';
   if (mime.includes('webp')) return 'webp';
+  if (mime.includes('heic') || mime.includes('heif')) return 'jpeg';
   return 'jpeg';
+}
+
+function stripDataUrlPrefix(dataUrl) {
+  const idx = dataUrl.indexOf(',');
+  return idx === -1 ? dataUrl : dataUrl.slice(idx + 1);
 }

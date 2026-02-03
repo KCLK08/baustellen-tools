@@ -4,7 +4,8 @@ const DEFAULTS = {
   maxSizeMB: 0.6,
   maxWidthOrHeight: 1600,
   useWebWorker: true,
-  initialQuality: 0.75
+  initialQuality: 0.75,
+  fileType: 'image/jpeg'
 };
 
 export async function compressImage(file) {
