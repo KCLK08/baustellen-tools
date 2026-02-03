@@ -901,8 +901,8 @@
   }
 </script>
 
+<svelte:window on:pointermove={movePointerDrag} on:pointerup={endPointerDrag} on:pointercancel={endPointerDrag} />
 <div class="page">
-  <svelte:window on:pointermove={movePointerDrag} on:pointerup={endPointerDrag} on:pointercancel={endPointerDrag} />
   {#if updateAvailable}
     <div class="update-banner">
       <span>Neue Version verfügbar.</span>
