@@ -86,11 +86,11 @@
   onMount(async () => {
     const saved = await loadSettings();
     if (saved) {
-      projectName = saved.projectName ?? projectName;
       protocolDescription = saved.protocolDescription ?? protocolDescription;
       columns = saved.columns ?? columns;
       selectedTemplateId = saved.selectedTemplateId ?? selectedTemplateId;
     }
+    projectName = '';
     protocolDate = today();
 
     const storedEntries = await listEntries();
@@ -512,7 +512,7 @@
   };
 
   const goToStart = () => {
-    view = 'start';
+    view = 'landing';
   };
 
   const downloadExport = async (exp) => {
