@@ -384,6 +384,16 @@
     };
   };
 
+  $: if (typeof document !== 'undefined') {
+    if (dragState.active) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+    }
+  }
+
   const startProtocol = async () => {
     activeProtocolId = null;
     activeProtocolCreatedAt = null;
@@ -913,7 +923,7 @@
 </script>
 
 <svelte:window on:pointermove={movePointerDrag} on:pointerup={endPointerDrag} on:pointercancel={endPointerDrag} />
-<div class="page">
+  <div class:dragging-page={dragState.active} class="page">
   {#if dragState.active}
     <div
       class="drag-ghost"
@@ -1086,7 +1096,14 @@
               <div class="col-placeholder" style={`height: ${dragState.height}px;`}></div>
             {/if}
             {#if !(dragState.active && dragState.id === col.id)}
-              <div class="col-card" data-index={idx} on:pointerdown={(event) => startPointerDrag(event, idx)}>
+              <div
+                class="col-card"
+                data-index={idx}
+                on:pointerdown={(event) => {
+                  event.preventDefault();
+                  startPointerDrag(event, idx);
+                }}
+              >
               <span class="drag-handle" aria-hidden="true">⋮⋮</span>
               {#if editingColIndex === idx}
                 <div class="edit-col">
@@ -1574,6 +1591,7 @@
     cursor: grab;
     position: relative;
     transition: transform 0.18s ease, box-shadow 0.18s ease;
+    touch-action: none;
   }
 
   .col-card:active {
@@ -1583,6 +1601,11 @@
   .dragging-list {
     touch-action: none;
     user-select: none;
+  }
+
+  .dragging-page {
+    overflow: hidden;
+    height: 100vh;
   }
 
   .drag-ghost {
