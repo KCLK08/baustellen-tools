@@ -109,3 +109,7 @@ export async function listTemplates() {
 export async function addTemplate(record) {
   await db.templates.put(record);
 }
+
+export async function updateTemplate(record) {
+  await db.templates.put(record);
+}

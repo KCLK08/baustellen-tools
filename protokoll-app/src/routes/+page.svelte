@@ -12,13 +12,15 @@
     deleteEntry,
     addTemplate,
     listTemplates,
+    updateTemplate,
     listProtocols,
     addProtocol,
     getProtocol,
     deleteProtocol,
     listExports,
     upsertExportByProtocol,
-    deleteExportsByProtocol
+    deleteExportsByProtocol,
+    deleteExport
   } from '$lib/db';
   import { compressImage, blobToObjectUrl } from '$lib/image';
   import { exportToXlsx, exportToXlsxData } from '$lib/export';
@@ -53,6 +55,8 @@
   let templates = [];
   let selectedTemplateId = '';
   let templateName = '';
+  let isCreatingFormat = false;
+  let isEditingFormat = false;
 
   let protocolsList = [];
   let exportsList = [];
@@ -174,6 +178,8 @@
     columns = tpl.columns?.length ? tpl.columns : columns;
     isDirty = true;
     persistSettings();
+    isCreatingFormat = false;
+    isEditingFormat = false;
   };
 
   const saveTemplate = async () => {
@@ -189,6 +195,40 @@
     selectedTemplateId = record.id;
     templateName = '';
     persistSettings();
+    isCreatingFormat = false;
+    isEditingFormat = false;
+    isDirty = true;
+  };
+
+  const startNewFormat = () => {
+    isCreatingFormat = true;
+    isEditingFormat = false;
+    selectedTemplateId = '';
+    templateName = '';
+    columns = [defaultColumns[0]];
+    newColName = '';
+    newColType = 'text';
+  };
+
+  const startEditFormat = () => {
+    if (!selectedTemplateId) return;
+    isEditingFormat = true;
+    isCreatingFormat = false;
+  };
+
+  const saveEditedFormat = async () => {
+    if (!selectedTemplateId) return;
+    const tpl = templates.find((t) => t.id === selectedTemplateId);
+    if (!tpl) return;
+    const updated = {
+      ...tpl,
+      columns: columns.map((c) => ({ ...c }))
+    };
+    await updateTemplate(updated);
+    templates = templates.map((t) => (t.id === updated.id ? updated : t));
+    isEditingFormat = false;
+    persistSettings();
+    isDirty = true;
   };
 
   const startProtocol = async () => {
@@ -369,8 +409,9 @@
       entries: protocolRecord.entries
     });
 
+    let exportRecord = null;
     if (result) {
-      await upsertExportByProtocol({
+      exportRecord = await upsertExportByProtocol({
         id: `export_${protocolRecord.id}`,
         protocolId: protocolRecord.id,
         createdAt: protocolRecord.createdAt,
@@ -381,6 +422,8 @@
         protocolDate: protocolRecord.protocolDate
       });
     }
+
+    return { protocolRecord, exportRecord };
   };
 
   const closeProtocol = () => {
@@ -397,10 +440,28 @@
     confirmDialog = {
       open: true,
       title: 'Vorgang abschließen',
-      message: 'Möchtest du die aktuellen Daten speichern oder verwerfen?',
-      primaryLabel: 'Speichern',
-      secondaryLabel: 'Verwerfen',
+      message: 'Excel jetzt direkt herunterladen?',
+      primaryLabel: 'Ja, downloaden',
+      secondaryLabel: 'Nein',
       onPrimary: async () => {
+        if (isExporting) return;
+        isExporting = true;
+        try {
+          const { exportRecord } = await saveAndExportProtocol();
+          protocolsList = await listProtocols();
+          exportsList = await listExports();
+          if (exportRecord) await downloadExport(exportRecord);
+          await resetProtocol();
+          view = 'protocols';
+          closeConfirm();
+        } catch (err) {
+          closeError = 'Abschluss fehlgeschlagen. Bitte erneut versuchen.';
+          console.error(err);
+        } finally {
+          isExporting = false;
+        }
+      },
+      onSecondary: async () => {
         if (isExporting) return;
         isExporting = true;
         try {
@@ -416,10 +477,6 @@
         } finally {
           isExporting = false;
         }
-      },
-      onSecondary: async () => {
-        await resetProtocol();
-        closeConfirm();
       }
     };
   };
@@ -649,7 +706,6 @@
     if (!ok) return;
     for (const protocol of protocolsList.filter((p) => selectedProtocols.has(p.id))) {
       await deleteProtocol(protocol.id);
-      await deleteExportsByProtocol(protocol.id);
     }
     protocolsList = await listProtocols();
     exportsList = await listExports();
@@ -665,7 +721,7 @@
     const ok = window.confirm('Ausgewählte Exporte wirklich löschen?');
     if (!ok) return;
     for (const exp of exportsList.filter((e) => selectedExports.has(e.id))) {
-      await deleteExportsByProtocol(exp.protocolId);
+      await deleteExport(exp.id);
     }
     exportsList = await listExports();
     selectedExports = new Set();
@@ -769,36 +825,54 @@
               <span class="muted">Noch kein Format vorhanden. Bitte zuerst erstellen.</span>
             {/if}
           </label>
-          <label class="field">
-            <span>Neues Format erstellen</span>
-            <div class="inline">
-              <input bind:value={templateName} placeholder="Formatname" />
-              <button type="button" on:click={saveTemplate}>Speichern</button>
-            </div>
-          </label>
+          <div class="field">
+            <span>Neues Format</span>
+            <button type="button" on:click={startNewFormat}>Neues Format anlegen</button>
+          </div>
         </div>
-        <div class="columns">
-          {#each columns as col}
-            <div class="col-card">
-              <div class="col-title">{col.name}</div>
-              <div class="col-meta">Typ: {col.type}</div>
-              {#if !col.isPhoto}
-                <button type="button" on:click={() => removeColumn(col.name)}>Spalte entfernen</button>
-              {:else}
-                <span class="photo-pill">Foto-Spalte</span>
-              {/if}
+        {#if isCreatingFormat || isEditingFormat}
+          <div class="section">
+            <h4>Spalten definieren</h4>
+            <div class="columns">
+              {#each columns as col}
+                <div class="col-card">
+                  <div class="col-title">{col.name}</div>
+                  <div class="col-meta">Typ: {col.type}</div>
+                  {#if !col.isPhoto}
+                    <button type="button" on:click={() => removeColumn(col.name)}>Spalte entfernen</button>
+                  {:else}
+                    <span class="photo-pill">Foto-Spalte</span>
+                  {/if}
+                </div>
+              {/each}
             </div>
-          {/each}
-        </div>
 
-        <div class="add-row">
-          <input bind:value={newColName} placeholder="Spaltenname" />
-          <select bind:value={newColType}>
-            <option value="text">Text</option>
-            <option value="number">Zahl</option>
-          </select>
-          <button type="button" on:click={addColumn}>Spalte hinzufügen</button>
-        </div>
+            <div class="add-row">
+              <input bind:value={newColName} placeholder="Spaltenname" />
+              <select bind:value={newColType}>
+                <option value="text">Text</option>
+                <option value="number">Zahl</option>
+              </select>
+              <button type="button" on:click={addColumn}>Spalte hinzufügen</button>
+            </div>
+
+            {#if isCreatingFormat}
+              <div class="inline">
+                <input bind:value={templateName} placeholder="Formatname" />
+                <button type="button" on:click={saveTemplate}>Format speichern</button>
+              </div>
+            {:else}
+              <div class="inline">
+                <button type="button" on:click={saveEditedFormat}>Änderungen speichern</button>
+                <button type="button" on:click={() => (isEditingFormat = false)}>Abbrechen</button>
+              </div>
+            {/if}
+          </div>
+        {:else if selectedTemplateId}
+          <div class="cta-row">
+            <button type="button" on:click={startEditFormat}>Format bearbeiten</button>
+          </div>
+        {/if}
       </div>
 
       <div class="cta-row">
