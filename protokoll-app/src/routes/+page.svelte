@@ -730,71 +730,75 @@
   {#if view === 'start' || view === 'edit-setup'}
     <section class="panel">
       <h2>{view === 'edit-setup' ? 'Vorgang bearbeiten' : 'Protokoll erstellen'}</h2>
-      <label class="field">
-        <span>Projektname</span>
-        <input bind:value={projectName} placeholder="Trag den Projektnamen ein" on:input={() => (isDirty = true)} />
-      </label>
-
-      <label class="field">
-        <span>Beschreibung</span>
-        <input
-          type="text"
-          placeholder="Kurzbeschreibung"
-          bind:value={protocolDescription}
-          on:input={() => (isDirty = true)}
-        />
-      </label>
-
-      <label class="field">
-        <span>Datum</span>
-        <div class="readonly-field">{protocolDate}</div>
-      </label>
-
-      <h3>Tabellenformat</h3>
-
-      <div class="grid">
+      <div class="section">
+        <h3>Stammdaten</h3>
         <label class="field">
-          <span>Gespeichertes Format</span>
-          <select bind:value={selectedTemplateId} on:change={applyTemplate}>
-            <option value="">Format auswählen</option>
-            {#each templates as tpl}
-              <option value={tpl.id}>{tpl.name}</option>
-            {/each}
-          </select>
+          <span>Projektname</span>
+          <input bind:value={projectName} placeholder="Trag den Projektnamen ein" on:input={() => (isDirty = true)} />
         </label>
+
         <label class="field">
-          <span>Neues Format speichern</span>
-          <div class="inline">
-            <input bind:value={templateName} placeholder="Formatname" />
-            <button type="button" on:click={saveTemplate}>Speichern</button>
-          </div>
+          <span>Beschreibung</span>
+          <input
+            type="text"
+            placeholder="Kurzbeschreibung"
+            bind:value={protocolDescription}
+            on:input={() => (isDirty = true)}
+          />
+        </label>
+
+        <label class="field">
+          <span>Datum</span>
+          <div class="readonly-field">{protocolDate}</div>
         </label>
       </div>
 
-      {#if templates.length === 0}
-        <p class="muted">Noch keine Tabellenformate gespeichert.</p>
-      {/if}
-      <div class="columns">
-        {#each columns as col}
-          <div class="col-card">
-            <div class="col-title">{col.name}</div>
-            <div class="col-meta">Typ: {col.type}</div>
-            {#if !col.isPhoto}
-              <button type="button" on:click={() => removeColumn(col.name)}>Spalte entfernen</button>
-            {:else}
-              <span class="photo-pill">Foto-Spalte</span>
+      <div class="section">
+        <h3>Tabellenformat</h3>
+
+        <div class="grid">
+          <label class="field">
+            <span>Format auswählen</span>
+            <select bind:value={selectedTemplateId} on:change={applyTemplate}>
+              <option value="">Format auswählen</option>
+              {#each templates as tpl}
+                <option value={tpl.id}>{tpl.name}</option>
+              {/each}
+            </select>
+            {#if templates.length === 0}
+              <span class="muted">Noch kein Format vorhanden. Bitte zuerst erstellen.</span>
             {/if}
-          </div>
-        {/each}
-      </div>
+          </label>
+          <label class="field">
+            <span>Neues Format erstellen</span>
+            <div class="inline">
+              <input bind:value={templateName} placeholder="Formatname" />
+              <button type="button" on:click={saveTemplate}>Speichern</button>
+            </div>
+          </label>
+        </div>
+        <div class="columns">
+          {#each columns as col}
+            <div class="col-card">
+              <div class="col-title">{col.name}</div>
+              <div class="col-meta">Typ: {col.type}</div>
+              {#if !col.isPhoto}
+                <button type="button" on:click={() => removeColumn(col.name)}>Spalte entfernen</button>
+              {:else}
+                <span class="photo-pill">Foto-Spalte</span>
+              {/if}
+            </div>
+          {/each}
+        </div>
 
-      <div class="add-row">
-        <input bind:value={newColName} placeholder="Spaltenname" />
-        <select bind:value={newColType}>
-          <option value="text">Text</option>
-          <option value="number">Zahl</option>
-        </select>
-        <button type="button" on:click={addColumn}>Spalte hinzufügen</button>
+        <div class="add-row">
+          <input bind:value={newColName} placeholder="Spaltenname" />
+          <select bind:value={newColType}>
+            <option value="text">Text</option>
+            <option value="number">Zahl</option>
+          </select>
+          <button type="button" on:click={addColumn}>Spalte hinzufügen</button>
+        </div>
       </div>
 
       <div class="cta-row">
@@ -1152,6 +1156,14 @@
     padding: 20px;
     margin-bottom: 20px;
     box-shadow: 0 12px 30px rgba(23, 21, 18, 0.08);
+  }
+
+  .section {
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    margin: 14px 0;
+    background: #fff;
   }
 
   .update-banner {
