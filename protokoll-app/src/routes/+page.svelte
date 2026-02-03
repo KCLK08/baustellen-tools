@@ -1328,26 +1328,28 @@
     <section class="panel">
       <h2>Eintrag</h2>
       {#if currentStep()}
-        <label class="field">
-          <span>{currentStep().name}</span>
-          {#if currentStep().type === 'number'}
-            <input
-              type="number"
-              placeholder={currentStep().name}
-              bind:value={entryDraft.fields[currentStep().name]}
-              on:input={() => (isDirty = true)}
-              bind:this={entryInputRef}
-            />
-          {:else}
-            <input
-              type="text"
-              placeholder={currentStep().name}
-              bind:value={entryDraft.fields[currentStep().name]}
-              on:input={() => (isDirty = true)}
-              bind:this={entryInputRef}
-            />
-          {/if}
-        </label>
+        {#key currentStep().id}
+          <label class="field">
+            <span>{currentStep().name}</span>
+            {#if currentStep().type === 'number'}
+              <input
+                type="number"
+                placeholder={currentStep().name}
+                bind:value={entryDraft.fields[currentStep().name]}
+                on:input={() => (isDirty = true)}
+                bind:this={entryInputRef}
+              />
+            {:else}
+              <input
+                type="text"
+                placeholder={currentStep().name}
+                bind:value={entryDraft.fields[currentStep().name]}
+                on:input={() => (isDirty = true)}
+                bind:this={entryInputRef}
+              />
+            {/if}
+          </label>
+        {/key}
       {/if}
 
       <div class="cta-row">
