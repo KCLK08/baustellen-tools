@@ -28,7 +28,7 @@
     { name: 'Status', type: 'text', isPhoto: false }
   ];
 
-  let view = 'start';
+  let view = 'landing';
 
   let projectName = '';
   let protocolDate = today();
@@ -84,6 +84,7 @@
       projectName = saved.projectName ?? projectName;
       protocolDescription = saved.protocolDescription ?? protocolDescription;
       columns = saved.columns ?? columns;
+      selectedTemplateId = saved.selectedTemplateId ?? selectedTemplateId;
     }
     protocolDate = today();
 
@@ -99,7 +100,7 @@
   });
 
   const persistSettings = async () => {
-    await saveSettings({ projectName, protocolDate, protocolDescription, columns });
+    await saveSettings({ projectName, protocolDate, protocolDescription, columns, selectedTemplateId });
   };
 
   const addColumn = () => {
@@ -123,6 +124,7 @@
     if (!tpl) return;
     columns = tpl.columns?.length ? tpl.columns : columns;
     isDirty = true;
+    persistSettings();
   };
 
   const saveTemplate = async () => {
@@ -137,6 +139,7 @@
     templates = [record, ...templates];
     selectedTemplateId = record.id;
     templateName = '';
+    persistSettings();
   };
 
   const startProtocol = async () => {
@@ -649,6 +652,22 @@
     <a class="toolbox-link" href="/baustellen-tools/">Zur Toolbox</a>
   </header>
 
+  {#if view === 'landing'}
+    <section class="panel landing">
+      <h2>Protokoll starten</h2>
+      <p class="muted">Lege einen neuen Vorgang an oder öffne bestehende Protokolle.</p>
+      <div class="cta-row">
+        <button class="primary full-width" type="button" on:click={() => (view = 'start')}>
+          Neues Protokoll starten
+        </button>
+      </div>
+      <div class="cta-row">
+        <button type="button" on:click={goToProtocols}>Protokolle anzeigen</button>
+        <button type="button" on:click={goToExports}>Exports anzeigen</button>
+      </div>
+    </section>
+  {/if}
+
   {#if view === 'start' || view === 'edit-setup'}
     <section class="panel">
       <h2>{view === 'edit-setup' ? 'Vorgang bearbeiten' : 'Protokoll erstellen'}</h2>
@@ -724,10 +743,8 @@
           <button class="primary" type="button" on:click={saveSetup}>Änderungen speichern</button>
           <button type="button" on:click={() => (view = 'main')}>Zurück</button>
         {:else}
-          <button class="primary" type="button" on:click={startProtocol}>Protokoll starten</button>
+          <button class="primary full-width" type="button" on:click={startProtocol}>Protokoll starten</button>
         {/if}
-        <button type="button" on:click={goToProtocols}>Protokolle anzeigen</button>
-        <button type="button" on:click={goToExports}>Exports anzeigen</button>
       </div>
     </section>
   {/if}
@@ -1068,6 +1085,10 @@
     box-shadow: 0 12px 30px rgba(23, 21, 18, 0.08);
   }
 
+  .landing {
+    text-align: left;
+  }
+
   .field {
     display: flex;
     flex-direction: column;
@@ -1105,6 +1126,11 @@
     background: var(--accent);
     color: white;
     border-color: var(--accent);
+  }
+
+  .full-width {
+    width: 100%;
+    justify-content: center;
   }
 
   button:disabled {
