@@ -649,7 +649,11 @@
       <h1>Protokoll App</h1>
       <p class="sub">Schrittweise Dokumentation mit Foto und XLSX-Export.</p>
     </div>
-    <a class="toolbox-link" href="/baustellen-tools/">Zur Toolbox</a>
+    {#if view === 'start' || view === 'edit-setup'}
+      <button class="toolbox-link" type="button" on:click={() => (view = 'landing')}>Zur Startseite</button>
+    {:else}
+      <a class="toolbox-link" href="/baustellen-tools/">Zur Toolbox</a>
+    {/if}
   </header>
 
   {#if view === 'landing'}
