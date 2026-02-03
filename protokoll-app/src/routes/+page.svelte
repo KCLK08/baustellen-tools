@@ -63,6 +63,7 @@
   let formatMode = 'new';
   let formatReturnView = 'start';
   let formatBackup = null;
+  let showFormatInfo = false;
   let editingColIndex = null;
   let editColName = '';
   let editColType = 'text';
@@ -384,13 +385,28 @@
     };
   };
 
+  let lockedScrollY = 0;
   $: if (typeof document !== 'undefined') {
     if (dragState.active) {
+      lockedScrollY = window.scrollY || 0;
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${lockedScrollY}px`;
+      document.body.style.left = '0';
+      document.body.style.right = '0';
       document.body.style.overflow = 'hidden';
       document.body.style.touchAction = 'none';
     } else {
+      const restoreY = lockedScrollY;
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.right = '';
       document.body.style.overflow = '';
       document.body.style.touchAction = '';
+      if (restoreY) {
+        window.scrollTo(0, restoreY);
+      }
+      lockedScrollY = 0;
     }
   }
 
@@ -1002,11 +1018,17 @@
             class="info-button"
             type="button"
             aria-label="Info zum Tabellenformat"
-            title="Hier legst du fest, welche Spalten in der Excel-Datei erscheinen. Wähle ein vorhandenes Format oder erstelle ein neues."
+            on:click={() => (showFormatInfo = !showFormatInfo)}
           >
             i
           </button>
         </h3>
+        {#if showFormatInfo}
+          <div class="info-popover">
+            Hier legst du fest, welche Spalten in der Excel-Datei erscheinen. Wähle ein vorhandenes Format oder erstelle
+            ein neues. Die Reihenfolge der Spalten bestimmt später die Reihenfolge der Eingaben.
+          </div>
+        {/if}
 
         <div class="grid">
           <label class="field">
@@ -1605,7 +1627,6 @@
 
   .dragging-page {
     overflow: hidden;
-    height: 100vh;
   }
 
   .drag-ghost {
@@ -1773,6 +1794,17 @@
   .info-button:hover {
     color: var(--ink);
     border-color: var(--ink);
+  }
+
+  .info-popover {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--ink);
+    font-size: 13px;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
   }
 
   .cta-row {
