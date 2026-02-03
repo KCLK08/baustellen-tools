@@ -60,6 +60,10 @@
   let formatMode = 'new';
   let formatReturnView = 'start';
   let formatBackup = null;
+  let dragIndex = null;
+  let editingColIndex = null;
+  let editColName = '';
+  let editColType = 'text';
 
   let protocolsList = [];
   let exportsList = [];
@@ -261,6 +265,45 @@
     isEditingFormat = false;
     formatBackup = null;
     view = formatReturnView;
+  };
+
+  const reorderColumns = (from, to) => {
+    if (from === null || to === null || from === to) return;
+    const next = columns.slice();
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    columns = next;
+    isDirty = true;
+  };
+
+  const startEditColumn = (idx) => {
+    const col = columns[idx];
+    if (!col) return;
+    editingColIndex = idx;
+    editColName = col.name;
+    editColType = col.type;
+  };
+
+  const saveEditColumn = () => {
+    if (editingColIndex === null) return;
+    if (!editColName.trim()) return;
+    columns = columns.map((col, idx) => {
+      if (idx !== editingColIndex) return col;
+      if (col.isPhoto) {
+        return { ...col, name: editColName.trim() };
+      }
+      return { ...col, name: editColName.trim(), type: editColType };
+    });
+    isDirty = true;
+    editingColIndex = null;
+    editColName = '';
+    editColType = 'text';
+  };
+
+  const cancelEditColumn = () => {
+    editingColIndex = null;
+    editColName = '';
+    editColType = 'text';
   };
 
   const startProtocol = async () => {
@@ -927,14 +970,43 @@
       <div class="section">
         <h3>Spalten definieren</h3>
         <div class="columns">
-          {#each columns as col}
-            <div class="col-card">
-              <div class="col-title">{col.name}</div>
-              <div class="col-meta">Typ: {col.type}</div>
-              {#if !col.isPhoto}
-                <button type="button" on:click={() => removeColumn(col.name)}>Spalte entfernen</button>
+          {#each columns as col, idx}
+            <div
+              class:dragging={dragIndex === idx}
+              class="col-card"
+              draggable="true"
+              on:dragstart={() => (dragIndex = idx)}
+              on:dragend={() => (dragIndex = null)}
+              on:dragover|preventDefault
+              on:drop={() => {
+                reorderColumns(dragIndex, idx);
+                dragIndex = null;
+              }}
+            >
+              <span class="drag-handle" aria-hidden="true">⋮⋮</span>
+              {#if editingColIndex === idx}
+                <div class="edit-col">
+                  <input bind:value={editColName} placeholder="Spaltenname" />
+                  <select bind:value={editColType} disabled={col.isPhoto}>
+                    <option value="text">Text</option>
+                    <option value="number">Zahl</option>
+                  </select>
+                  <div class="edit-actions">
+                    <button class="primary" type="button" on:click={saveEditColumn}>Speichern</button>
+                    <button type="button" on:click={cancelEditColumn}>Abbrechen</button>
+                  </div>
+                </div>
               {:else}
-                <span class="photo-pill">Foto-Spalte</span>
+                <div class="col-title">{col.name}</div>
+                <div class="col-meta">Typ: {col.type}</div>
+                <div class="col-actions">
+                  <button type="button" on:click={() => startEditColumn(idx)}>Bearbeiten</button>
+                  {#if !col.isPhoto}
+                    <button type="button" on:click={() => removeColumn(col.name)}>Spalte entfernen</button>
+                  {:else}
+                    <span class="photo-pill">Foto-Spalte</span>
+                  {/if}
+                </div>
               {/if}
             </div>
           {/each}
@@ -1397,6 +1469,45 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    cursor: grab;
+    position: relative;
+  }
+
+  .col-card:active {
+    cursor: grabbing;
+  }
+
+  .col-card.dragging {
+    opacity: 0.6;
+    border-style: solid;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  }
+
+  .drag-handle {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    color: var(--muted);
+    font-size: 14px;
+    letter-spacing: -2px;
+  }
+
+  .col-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .edit-col {
+    display: grid;
+    gap: 8px;
+  }
+
+  .edit-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
   .col-title {
