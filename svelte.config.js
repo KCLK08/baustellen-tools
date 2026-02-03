@@ -8,7 +8,7 @@ export default {
       fallback: 'index.html'
     }),
     paths: {
-      relative: false,
+      relative: true,
       base: '/baustellen-tools'
     }
   }

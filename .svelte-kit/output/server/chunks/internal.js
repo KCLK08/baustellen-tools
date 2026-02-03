@@ -1,7 +1,11 @@
 import { c as create_ssr_component, a as setContext, v as validate_component, m as missing_component } from "./ssr.js";
-let base = "";
+let base = "/baustellen-tools";
 let assets = base;
 const initial = { base, assets };
+function override(paths) {
+  base = paths.base;
+  assets = paths.assets;
+}
 function reset() {
   base = initial.base;
   assets = initial.assets;
@@ -111,7 +115,7 @@ const options = {
   root: Root,
   service_worker: false,
   templates: {
-    app: ({ head, body, assets: assets2, nonce, env }) => '<!doctype html>\n<html lang="de">\n  <head>\n    <meta charset="utf-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1" />\n    <meta name="theme-color" content="#0f172a" />\n    <link rel="manifest" href="/manifest.webmanifest" />\n    ' + head + '\n  </head>\n  <body>\n    <div style="display: contents">' + body + "</div>\n  </body>\n</html>\n",
+    app: ({ head, body, assets: assets2, nonce, env }) => '<!doctype html>\n<html lang="de">\n  <head>\n    <meta charset="utf-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1" />\n    <meta name="theme-color" content="#0f172a" />\n    <link rel="manifest" href="' + assets2 + '/manifest.webmanifest" />\n    ' + head + '\n  </head>\n  <body>\n    <div style="display: contents">' + body + "</div>\n  </body>\n</html>\n",
     error: ({ status, message }) => '<!doctype html>\n<html lang="en">\n	<head>\n		<meta charset="utf-8" />\n		<title>' + message + `</title>
 
 		<style>
@@ -183,7 +187,7 @@ const options = {
 		<div class="error">
 			<span class="status">` + status + '</span>\n			<div class="message">\n				<h1>' + message + "</h1>\n			</div>\n		</div>\n	</body>\n</html>\n"
   },
-  version_hash: "6aualw"
+  version_hash: "15n3p89"
 };
 async function get_hooks() {
   return {};
@@ -191,17 +195,18 @@ async function get_hooks() {
 export {
   assets as a,
   base as b,
-  set_private_env as c,
-  prerendering as d,
-  set_public_env as e,
-  set_safe_public_env as f,
+  options as c,
+  set_private_env as d,
+  prerendering as e,
+  set_public_env as f,
   get_hooks as g,
-  set_assets as h,
-  set_building as i,
-  set_manifest as j,
-  set_prerendering as k,
-  set_read_implementation as l,
-  options as o,
+  set_safe_public_env as h,
+  set_assets as i,
+  set_building as j,
+  set_manifest as k,
+  set_prerendering as l,
+  set_read_implementation as m,
+  override as o,
   public_env as p,
   reset as r,
   safe_public_env as s
