@@ -273,6 +273,12 @@
     }
   };
 
+  const cancelProtocol = async () => {
+    const ok = window.confirm('Protokoll verwerfen? Alle bisherigen Einträge werden gelöscht.');
+    if (!ok) return;
+    await resetProtocol();
+  };
+
   const goToExports = () => {
     downloadError = '';
     view = 'exports';
@@ -483,6 +489,7 @@
         <button type="button" disabled={isExporting} on:click={closeProtocol}>
           {isExporting ? 'Abschließen…' : 'Protokoll abschließen'}
         </button>
+        <button type="button" on:click={cancelProtocol}>Protokoll verlassen</button>
       </div>
       {#if closeError}
         <p class="error">{closeError}</p>
