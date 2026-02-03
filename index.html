@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Baustellen Tools</title>
+    <style>
+      :root {
+        --bg: #f6f3ee;
+        --ink: #151515;
+        --muted: #6a625a;
+        --accent: #e07a5f;
+        --panel: #fffdf9;
+        --border: #e7dfd5;
+      }
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+        background: radial-gradient(1200px 800px at 10% -10%, #fdebd2 0%, transparent 60%),
+          radial-gradient(900px 700px at 100% 0%, #dbe7f6 0%, transparent 55%),
+          var(--bg);
+        color: var(--ink);
+      }
+      .page {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 40px 20px 80px;
+      }
+      h1 {
+        margin: 0 0 12px;
+      }
+      .sub {
+        color: var(--muted);
+        margin: 0 0 24px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 16px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 16px;
+        box-shadow: 0 12px 30px rgba(23, 21, 18, 0.08);
+      }
+      .card a {
+        display: inline-block;
+        margin-top: 10px;
+        color: var(--accent);
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .tag {
+        display: inline-block;
+        background: #eef2ff;
+        color: #3d405b;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <h1>Baustellen Tools</h1>
+      <p class="sub">Sammlung interner Tools für Baustellen‑Dokumentation.</p>
+
+      <div class="grid">
+        <div class="card">
+          <div class="tag">Tool 1</div>
+          <h2>Protokoll App</h2>
+          <p>Foto‑basierte Protokolle mit XLSX‑Export.</p>
+          <a href="/baustellen-tools/protokoll-app/">Öffnen</a>
+        </div>
+        <div class="card">
+          <div class="tag">Platzhalter</div>
+          <h2>Tool 2</h2>
+          <p>Demnächst verfügbar.</p>
+          <a href="/baustellen-tools/tool-platzhalter-2/">Öffnen</a>
+        </div>
+        <div class="card">
+          <div class="tag">Platzhalter</div>
+          <h2>Tool 3</h2>
+          <p>Demnächst verfügbar.</p>
+          <a href="/baustellen-tools/tool-platzhalter-3/">Öffnen</a>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

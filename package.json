@@ -1,37 +1,12 @@
 {
-  "name": "protokoll-app",
+  "name": "baustellen-tools",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
-    "preview": "vite preview",
-    "deploy": "npm run build && npx gh-pages -d build --dotfiles --no-history",
-    "cap:init": "cap init --config capacitor.config.json",
-    "cap:add:ios": "cap add ios",
-    "cap:add:android": "cap add android",
-    "cap:sync": "cap sync",
-    "cap:open:ios": "cap open ios",
-    "cap:open:android": "cap open android"
+    "build:protokoll": "cd protokoll-app && npm run build",
+    "deploy": "npm run build:protokoll && rm -rf dist && mkdir -p dist/protokoll-app && cp -R index.html tool-platzhalter-2 tool-platzhalter-3 dist/ && cp -R protokoll-app/build/* dist/protokoll-app/ && touch dist/.nojekyll && npx gh-pages -d dist --dotfiles --no-history"
   },
   "devDependencies": {
-    "@capacitor/android": "6.1.2",
-    "@capacitor/cli": "6.1.2",
-    "@capacitor/ios": "6.1.2",
-    "@sveltejs/adapter-static": "3.0.5",
-    "@sveltejs/kit": "2.5.18",
-    "@sveltejs/vite-plugin-svelte": "3.1.2",
-    "gh-pages": "^6.3.0",
-    "svelte": "4.2.18",
-    "vite": "5.4.2"
-  },
-  "dependencies": {
-    "@capacitor/core": "6.1.2",
-    "@capacitor/filesystem": "6.0.2",
-    "@capacitor/share": "6.0.2",
-    "browser-image-compression": "2.0.2",
-    "dexie": "4.0.7",
-    "exceljs": "4.4.0"
+    "gh-pages": "^6.2.0"
   }
 }
