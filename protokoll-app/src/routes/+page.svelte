@@ -465,10 +465,6 @@
     entryDraft = { fields: {}, photoFile: null, photoPreview: '' };
     stepIndex = 0;
     entrySteps = columns.map((c) => ({ ...c }));
-    console.log('[entry] start', {
-      stepIndex,
-      steps: entrySteps.map((c) => ({ id: c.id, name: c.name, isPhoto: c.isPhoto }))
-    });
     if (!entrySteps.length) {
       finalizeEntry();
       return;
@@ -489,10 +485,6 @@
     };
     stepIndex = 0;
     entrySteps = columns.map((c) => ({ ...c }));
-    console.log('[entry] edit', {
-      stepIndex,
-      steps: entrySteps.map((c) => ({ id: c.id, name: c.name, isPhoto: c.isPhoto }))
-    });
     if (!entrySteps.length) {
       finalizeEntry();
       return;
@@ -525,11 +517,6 @@
   const goToStep = (idx) => {
     stepIndex = idx;
     const col = entrySteps[idx];
-    console.log('[entry] step', {
-      stepIndex,
-      step: col ? { id: col.id, name: col.name, isPhoto: col.isPhoto } : null,
-      view: col?.isPhoto ? 'photo' : 'field'
-    });
     view = col?.isPhoto ? 'photo' : 'field';
     currentField = col && !col.isPhoto ? col : null;
     if (view === 'field') {
