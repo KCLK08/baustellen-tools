@@ -646,6 +646,7 @@
       <h1>Protokoll App</h1>
       <p class="sub">Schrittweise Dokumentation mit Foto und XLSX-Export.</p>
     </div>
+    <a class="toolbox-link" href="/baustellen-tools/">Zur Toolbox</a>
   </header>
 
   {#if view === 'start' || view === 'edit-setup'}
@@ -1046,6 +1047,16 @@
   .sub {
     margin: 0;
     color: var(--muted);
+  }
+
+  .toolbox-link {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    border-radius: 999px;
+    text-decoration: none;
+    color: var(--ink);
+    font-weight: 600;
+    background: #fff;
   }
 
   .panel {

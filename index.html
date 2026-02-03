@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="apple-touch-icon" sizes="180x180" href="/baustellen-tools/apple-touch-icon.png" />
     <link rel="manifest" href="/baustellen-tools/manifest.webmanifest" />
-    <title>Tools für Bauüberwacher</title>
+    <title>BÜW Toolbox</title>
     <style>
       :root {
         --bg: #f3efe7;
@@ -125,24 +125,19 @@
         margin-bottom: 10px;
       }
       .icon {
-        width: 42px;
-        height: 42px;
+        width: 46px;
+        height: 46px;
         border-radius: 14px;
+        border: 1px solid var(--border);
+        background: #fff;
         display: grid;
         place-items: center;
-        font-weight: 700;
-        color: white;
-        font-size: 14px;
-        letter-spacing: 0.02em;
+        overflow: hidden;
       }
-      .icon.protokoll {
-        background: linear-gradient(135deg, #d3543c, #f2b179);
-      }
-      .icon.tool2 {
-        background: linear-gradient(135deg, #1d2b36, #4b6b7a);
-      }
-      .icon.tool3 {
-        background: linear-gradient(135deg, #3b3a2f, #7a744f);
+      .icon img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
       }
       .card p {
         margin: 0;
@@ -160,7 +155,7 @@
       <div class="hero">
         <div>
           <div class="pill">Interne Toolbox</div>
-          <h1>Tools für Bauüberwacher</h1>
+          <h1>BÜW Toolbox</h1>
           <p class="sub">Zentrale Übersicht für digitale Baustellen‑Workflows und Dokumentation.</p>
         </div>
       </div>
@@ -169,7 +164,9 @@
         <a class="card-link" href="/baustellen-tools/protokoll-app/">
           <div class="card">
             <div class="card-header">
-              <div class="icon protokoll">PA</div>
+              <div class="icon">
+                <img src="/baustellen-tools/protokoll-app/icons/icon-192.png" alt="Protokoll App Icon" />
+              </div>
               <h2>Protokoll App</h2>
             </div>
             <p>Foto‑basierte Protokolle mit XLSX‑Export.</p>
@@ -178,7 +175,9 @@
         <a class="card-link" href="/baustellen-tools/tool-platzhalter-2/">
           <div class="card">
             <div class="card-header">
-              <div class="icon tool2">T2</div>
+              <div class="icon">
+                <img src="/baustellen-tools/icon-192.png" alt="Tool 2 Icon" />
+              </div>
               <h2>Tool 2</h2>
             </div>
             <p>Demnächst verfügbar.</p>
@@ -187,7 +186,9 @@
         <a class="card-link" href="/baustellen-tools/tool-platzhalter-3/">
           <div class="card">
             <div class="card-header">
-              <div class="icon tool3">T3</div>
+              <div class="icon">
+                <img src="/baustellen-tools/icon-192.png" alt="Tool 3 Icon" />
+              </div>
               <h2>Tool 3</h2>
             </div>
             <p>Demnächst verfügbar.</p>
