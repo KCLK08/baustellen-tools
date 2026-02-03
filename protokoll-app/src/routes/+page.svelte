@@ -55,6 +55,7 @@
 
   let stepIndex = 0;
   let entrySteps = [];
+  let currentField = null;
   let entryInputRef;
 
   let templates = [];
@@ -473,6 +474,7 @@
       return;
     }
     view = entrySteps[0].isPhoto ? 'photo' : 'field';
+    currentField = entrySteps[0].isPhoto ? null : entrySteps[0];
     if (view === 'field') {
       tick().then(() => entryInputRef?.focus());
     }
@@ -496,6 +498,7 @@
       return;
     }
     view = entrySteps[0].isPhoto ? 'photo' : 'field';
+    currentField = entrySteps[0].isPhoto ? null : entrySteps[0];
     if (view === 'field') {
       tick().then(() => entryInputRef?.focus());
     }
@@ -528,6 +531,7 @@
       view: col?.isPhoto ? 'photo' : 'field'
     });
     view = col?.isPhoto ? 'photo' : 'field';
+    currentField = col && !col.isPhoto ? col : null;
     if (view === 'field') {
       tick().then(() => entryInputRef?.focus());
     }
@@ -584,6 +588,7 @@
       editingEntryId = null;
       stepIndex = 0;
       entrySteps = [];
+      currentField = null;
       view = 'main';
     } catch (err) {
       saveError = 'Speichern fehlgeschlagen. Bitte erneut versuchen.';
@@ -1340,23 +1345,23 @@
   {#if view === 'field'}
     <section class="panel">
       <h2>Eintrag</h2>
-      {#if currentStep()}
-        {#key currentStep().id}
+      {#if currentField}
+        {#key currentField.id}
           <label class="field">
-            <span>{currentStep().name}</span>
-            {#if currentStep().type === 'number'}
+            <span>{currentField.name}</span>
+            {#if currentField.type === 'number'}
               <input
                 type="number"
-                placeholder={currentStep().name}
-                bind:value={entryDraft.fields[currentStep().name]}
+                placeholder={currentField.name}
+                bind:value={entryDraft.fields[currentField.name]}
                 on:input={() => (isDirty = true)}
                 bind:this={entryInputRef}
               />
             {:else}
               <input
                 type="text"
-                placeholder={currentStep().name}
-                bind:value={entryDraft.fields[currentStep().name]}
+                placeholder={currentField.name}
+                bind:value={entryDraft.fields[currentField.name]}
                 on:input={() => (isDirty = true)}
                 bind:this={entryInputRef}
               />
