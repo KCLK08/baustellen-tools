@@ -20,6 +20,14 @@ db.version(3).stores({
   templates: 'id, createdAt, name'
 });
 
+db.version(4).stores({
+  settings: '&id',
+  entries: 'id, createdAt',
+  exports: 'id, createdAt, protocolId',
+  templates: 'id, createdAt, name',
+  protocols: 'id, createdAt, updatedAt'
+});
+
 export async function loadSettings() {
   const row = await db.settings.get('current');
   return row?.value ?? null;
@@ -45,6 +53,10 @@ export async function clearEntries() {
   await db.entries.clear();
 }
 
+export async function deleteEntry(id) {
+  await db.entries.delete(id);
+}
+
 export async function listExports() {
   return db.exports.orderBy('createdAt').reverse().toArray();
 }
@@ -55,6 +67,39 @@ export async function addExport(record) {
 
 export async function deleteExport(id) {
   await db.exports.delete(id);
+}
+
+export async function upsertExportByProtocol(record) {
+  const existing = await db.exports.where('protocolId').equals(record.protocolId).first();
+  if (existing) {
+    await db.exports.put({ ...existing, ...record, id: existing.id });
+    return { ...existing, ...record, id: existing.id };
+  }
+  await db.exports.put(record);
+  return record;
+}
+
+export async function deleteExportsByProtocol(protocolId) {
+  const matches = await db.exports.where('protocolId').equals(protocolId).toArray();
+  for (const exp of matches) {
+    await db.exports.delete(exp.id);
+  }
+}
+
+export async function listProtocols() {
+  return db.protocols.orderBy('updatedAt').reverse().toArray();
+}
+
+export async function addProtocol(record) {
+  await db.protocols.put(record);
+}
+
+export async function getProtocol(id) {
+  return db.protocols.get(id);
+}
+
+export async function deleteProtocol(id) {
+  await db.protocols.delete(id);
 }
 
 export async function listTemplates() {

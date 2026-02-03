@@ -7,15 +7,19 @@
     saveSettings,
     clearEntries,
     clearSettings,
-    addExport,
-    listExports,
-    deleteExport,
+    deleteEntry,
     addTemplate,
-    listTemplates
+    listTemplates,
+    listProtocols,
+    addProtocol,
+    getProtocol,
+    deleteProtocol,
+    listExports,
+    upsertExportByProtocol,
+    deleteExportsByProtocol
   } from '$lib/db';
   import { compressImage, blobToObjectUrl } from '$lib/image';
-  import { exportToXlsx, exportToXlsxShare } from '$lib/export';
-  import { isNativePlatform, shareXlsx } from '$lib/native';
+  import { exportToXlsx, exportToXlsxData } from '$lib/export';
 
   const defaultColumns = [
     { name: 'Bilder', type: 'text', isPhoto: true },
@@ -29,39 +33,52 @@
   let projectName = '';
   let protocolDate = today();
   let protocolDescription = '';
-
   let columns = [...defaultColumns];
 
   let newColName = '';
   let newColType = 'text';
 
   let entries = [];
-  let exportsList = [];
-  let templates = [];
-  let selectedTemplateId = '';
-  let templateName = '';
   let entryDraft = {
     fields: {},
     photoFile: null,
     photoPreview: ''
   };
+  let editingEntryId = null;
 
   let fieldIndex = 0;
 
+  let templates = [];
+  let selectedTemplateId = '';
+  let templateName = '';
+
+  let protocolsList = [];
+  let exportsList = [];
+
+  let activeProtocolId = null;
+  let activeProtocolCreatedAt = null;
+
   let isSaving = false;
   let isExporting = false;
-  let isSharing = false;
-  let settingsSaved = false;
-  let nativeAvailable = false;
   let saveError = '';
-  let downloadError = '';
-  let selectedExports = new Set();
-  let selectionMode = false;
   let closeError = '';
+  let downloadError = '';
+  let isDirty = false;
+  let selectionModeProtocols = false;
+  let selectedProtocols = new Set();
+  let selectionModeExports = false;
+  let selectedExports = new Set();
+  let confirmDialog = {
+    open: false,
+    title: '',
+    message: '',
+    primaryLabel: '',
+    secondaryLabel: '',
+    onPrimary: null,
+    onSecondary: null
+  };
 
   onMount(async () => {
-    nativeAvailable = isNativePlatform();
-
     const saved = await loadSettings();
     if (saved) {
       projectName = saved.projectName ?? projectName;
@@ -76,29 +93,28 @@
       photoPreview: e.photoBlob ? blobToObjectUrl(e.photoBlob) : ''
     }));
 
-    exportsList = await listExports();
     templates = await listTemplates();
+    protocolsList = await listProtocols();
+    exportsList = await listExports();
   });
+
+  const persistSettings = async () => {
+    await saveSettings({ projectName, protocolDate, protocolDescription, columns });
+  };
 
   const addColumn = () => {
     if (!newColName.trim()) return;
     columns = [...columns, { name: newColName.trim(), type: newColType, isPhoto: false }];
     newColName = '';
     newColType = 'text';
+    isDirty = true;
   };
 
   const removeColumn = (name) => {
     const target = columns.find((c) => c.name === name);
     if (!target || target.isPhoto) return;
     columns = columns.filter((c) => c.name !== name);
-  };
-
-  const persistSettings = async () => {
-    await saveSettings({ projectName, protocolDate, protocolDescription, columns });
-    settingsSaved = true;
-    setTimeout(() => {
-      settingsSaved = false;
-    }, 1600);
+    isDirty = true;
   };
 
   const applyTemplate = () => {
@@ -106,6 +122,7 @@
     const tpl = templates.find((t) => t.id === selectedTemplateId);
     if (!tpl) return;
     columns = tpl.columns?.length ? tpl.columns : columns;
+    isDirty = true;
   };
 
   const saveTemplate = async () => {
@@ -123,14 +140,72 @@
   };
 
   const startProtocol = async () => {
+    activeProtocolId = null;
+    activeProtocolCreatedAt = null;
+    await clearEntries();
+    entries = [];
     await persistSettings();
+    isDirty = false;
     view = 'main';
   };
 
+  const saveSetup = async () => {
+    await persistSettings();
+    isDirty = true;
+    view = 'main';
+  };
+
+  const openProtocol = async (id) => {
+    const protocol = await getProtocol(id);
+    if (!protocol) return;
+    activeProtocolId = protocol.id;
+    activeProtocolCreatedAt = protocol.createdAt;
+    projectName = protocol.projectName || '';
+    protocolDate = protocol.protocolDate || today();
+    protocolDescription = protocol.protocolDescription || '';
+    columns = protocol.columns?.length ? protocol.columns : [...defaultColumns];
+    entries = (protocol.entries || []).map((e) => ({
+      ...e,
+      photoPreview: e.photoBlob ? blobToObjectUrl(e.photoBlob) : ''
+    }));
+
+    await clearEntries();
+    for (const e of entries) {
+      await addEntry({
+        id: e.id,
+        createdAt: e.createdAt,
+        fields: e.fields,
+        photoBlob: e.photoBlob ?? null
+      });
+    }
+
+    isDirty = false;
+    editingEntryId = null;
+    view = 'protocol-view';
+  };
+
   const startEntry = () => {
+    editingEntryId = null;
     entryDraft = { fields: {}, photoFile: null, photoPreview: '' };
     fieldIndex = 0;
     view = 'photo';
+  };
+
+  const editEntry = (entry) => {
+    editingEntryId = entry.id;
+    entryDraft = {
+      fields: { ...entry.fields },
+      photoFile: entry.photoBlob ?? null,
+      photoPreview: entry.photoPreview ?? ''
+    };
+    fieldIndex = 0;
+    view = 'field';
+  };
+
+  const removeEntryItem = async (entryId) => {
+    entries = entries.filter((e) => e.id !== entryId);
+    await deleteEntry(entryId);
+    isDirty = true;
   };
 
   const handlePhoto = async (e) => {
@@ -139,6 +214,7 @@
     const compressed = await compressImage(file);
     entryDraft.photoFile = compressed;
     entryDraft.photoPreview = blobToObjectUrl(compressed);
+    isDirty = true;
     goToNextField();
   };
 
@@ -166,25 +242,35 @@
     saveError = '';
 
     try {
-      const entryId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : fallbackId();
+      const entryId = editingEntryId || fallbackId();
       const snapshot = {
         id: entryId,
-        createdAt: new Date().toISOString(),
+        createdAt: editingEntryId ? entryDraft.createdAt || new Date().toISOString() : new Date().toISOString(),
         fields: { ...entryDraft.fields },
         photoBlob: entryDraft.photoFile ?? null
       };
 
       await addEntry(snapshot);
 
-      entries = [
-        {
-          ...snapshot,
-          photoPreview: snapshot.photoBlob ? blobToObjectUrl(snapshot.photoBlob) : ''
-        },
-        ...entries
-      ];
+      if (editingEntryId) {
+        entries = entries.map((e) =>
+          e.id === editingEntryId
+            ? { ...snapshot, photoPreview: snapshot.photoBlob ? blobToObjectUrl(snapshot.photoBlob) : '' }
+            : e
+        );
+      } else {
+        entries = [
+          {
+            ...snapshot,
+            photoPreview: snapshot.photoBlob ? blobToObjectUrl(snapshot.photoBlob) : ''
+          },
+          ...entries
+        ];
+      }
 
+      isDirty = true;
       entryDraft = { fields: {}, photoFile: null, photoPreview: '' };
+      editingEntryId = null;
       fieldIndex = 0;
       view = 'main';
     } catch (err) {
@@ -199,94 +285,181 @@
     return `entry_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   }
 
-  const runExport = async () => {
-    if (isExporting) return;
-    isExporting = true;
-    const result = await exportToXlsx({ projectName, protocolDate, protocolDescription, columns, entries });
-    await addExportRecord(result);
-    isExporting = false;
-  };
-
-  const runShare = async () => {
-    if (isSharing) return;
-    isSharing = true;
-    const result = await exportToXlsxShare({
-      projectName,
-      protocolDate,
-      protocolDescription,
-      columns,
-      entries,
-      shareFn: shareXlsx
-    });
-    await addExportRecord(result);
-    isSharing = false;
-  };
-
-  const totalEntries = () => entries.length;
-
-  const addExportRecord = async (result) => {
-    if (!result) return;
-    const { filename, base64 } = result;
-    const record = {
-      id: `export_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      createdAt: new Date().toISOString(),
-      filename,
-      base64,
+  const buildProtocolRecord = () => {
+    const now = new Date().toISOString();
+    return {
+      id: activeProtocolId || `protocol_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      createdAt: activeProtocolCreatedAt || now,
+      updatedAt: now,
       projectName: projectName || '',
-      protocolDate: protocolDate || ''
+      protocolDate: protocolDate || today(),
+      protocolDescription: protocolDescription || '',
+      columns: columns.map((c) => ({ ...c })),
+      entries: entries.map((e) => ({
+        id: e.id,
+        createdAt: e.createdAt,
+        fields: e.fields,
+        photoBlob: e.photoBlob ?? null
+      }))
     };
-    await addExport(record);
-    exportsList = [record, ...exportsList];
+  };
+
+  const saveAndExportProtocol = async () => {
+    const protocolRecord = buildProtocolRecord();
+    await addProtocol(protocolRecord);
+    isDirty = false;
+
+    const result = await exportToXlsxData({
+      projectName: protocolRecord.projectName,
+      protocolDate: protocolRecord.protocolDate,
+      protocolDescription: protocolRecord.protocolDescription,
+      columns: protocolRecord.columns,
+      entries: protocolRecord.entries
+    });
+
+    if (result) {
+      await upsertExportByProtocol({
+        id: `export_${protocolRecord.id}`,
+        protocolId: protocolRecord.id,
+        createdAt: protocolRecord.createdAt,
+        updatedAt: new Date().toISOString(),
+        filename: result.filename,
+        base64: result.base64,
+        projectName: protocolRecord.projectName,
+        protocolDate: protocolRecord.protocolDate
+      });
+    }
+  };
+
+  const closeProtocol = () => {
+    closeError = '';
+    if (isExporting) return;
+
+    // If existing protocol and no changes, just return to list without prompt
+    if (activeProtocolId && !isDirty) {
+      resetProtocol();
+      view = 'protocols';
+      return;
+    }
+
+    confirmDialog = {
+      open: true,
+      title: 'Vorgang abschließen',
+      message: 'Möchtest du die aktuellen Daten speichern oder verwerfen?',
+      primaryLabel: 'Speichern',
+      secondaryLabel: 'Verwerfen',
+      onPrimary: async () => {
+        if (isExporting) return;
+        isExporting = true;
+        try {
+          await saveAndExportProtocol();
+          protocolsList = await listProtocols();
+          exportsList = await listExports();
+          await resetProtocol();
+          view = 'protocols';
+          closeConfirm();
+        } catch (err) {
+          closeError = 'Abschluss fehlgeschlagen. Bitte erneut versuchen.';
+          console.error(err);
+        } finally {
+          isExporting = false;
+        }
+      },
+      onSecondary: async () => {
+        await resetProtocol();
+        closeConfirm();
+      }
+    };
   };
 
   const resetProtocol = async () => {
     await clearEntries();
     await clearSettings();
     entries = [];
-    projectName = 'Baustellen-Protokoll';
+    projectName = '';
     protocolDate = today();
     protocolDescription = '';
     columns = [...defaultColumns];
+    activeProtocolId = null;
+    activeProtocolCreatedAt = null;
+    isDirty = false;
     view = 'start';
-    selectionMode = false;
-    clearSelection();
   };
 
-  const closeProtocol = async () => {
-    closeError = '';
-    const ok = window.confirm(
-      'Protokoll abschließen? Danach kannst du dieses Protokoll nicht mehr bearbeiten.'
-    );
-    if (!ok) return;
-    if (isExporting) return;
-    isExporting = true;
-    try {
-      const result = await exportToXlsx({ projectName, protocolDate, protocolDescription, columns, entries });
-      await addExportRecord(result);
-      await resetProtocol();
-      view = 'exports';
-    } catch (err) {
-      closeError = 'Abschluss fehlgeschlagen. Bitte erneut versuchen.';
-      console.error(err);
-    } finally {
-      isExporting = false;
+  const cancelProtocol = () => {
+    if (activeProtocolId && !isDirty) {
+      resetProtocol();
+      return;
     }
+    confirmDialog = {
+      open: true,
+      title: 'Protokoll verlassen',
+      message: 'Möchtest du die aktuellen Daten speichern oder verwerfen?',
+      primaryLabel: 'Speichern',
+      secondaryLabel: 'Verwerfen',
+      onPrimary: async () => {
+        const protocolRecord = buildProtocolRecord();
+        await addProtocol(protocolRecord);
+        const result = await exportToXlsxData({
+          projectName: protocolRecord.projectName,
+          protocolDate: protocolRecord.protocolDate,
+          protocolDescription: protocolRecord.protocolDescription,
+          columns: protocolRecord.columns,
+          entries: protocolRecord.entries
+        });
+        if (result) {
+          await upsertExportByProtocol({
+            id: `export_${protocolRecord.id}`,
+            protocolId: protocolRecord.id,
+            createdAt: protocolRecord.createdAt,
+            updatedAt: new Date().toISOString(),
+            filename: result.filename,
+            base64: result.base64,
+            projectName: protocolRecord.projectName,
+            protocolDate: protocolRecord.protocolDate
+          });
+        }
+        protocolsList = await listProtocols();
+        exportsList = await listExports();
+        await resetProtocol();
+        view = 'protocols';
+        isDirty = false;
+        closeConfirm();
+      },
+      onSecondary: async () => {
+        await resetProtocol();
+        closeConfirm();
+      }
+    };
   };
 
-  const cancelProtocol = async () => {
-    const ok = window.confirm('Protokoll verwerfen? Alle bisherigen Einträge werden gelöscht.');
-    if (!ok) return;
-    await resetProtocol();
+  const closeConfirm = () => {
+    confirmDialog = {
+      open: false,
+      title: '',
+      message: '',
+      primaryLabel: '',
+      secondaryLabel: '',
+      onPrimary: null,
+      onSecondary: null
+    };
   };
 
-  const goToExports = () => {
-    downloadError = '';
+  const goToProtocols = async () => {
+    protocolsList = await listProtocols();
+    selectionModeProtocols = false;
+    selectedProtocols = new Set();
+    view = 'protocols';
+  };
+
+  const goToExports = async () => {
+    exportsList = await listExports();
+    selectionModeExports = false;
+    selectedExports = new Set();
     view = 'exports';
   };
 
   const goToStart = () => {
-    selectionMode = false;
-    clearSelection();
     view = 'start';
   };
 
@@ -301,7 +474,7 @@
       bytes[i] = byteString.charCodeAt(i);
     }
     const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const filename = exp.filename || 'protokoll.xlsx';
+    const filename = buildFilename(exp.projectName, exp.protocolDate);
 
     if (navigator?.canShare) {
       try {
@@ -316,19 +489,54 @@
     }
 
     const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   };
 
-  const downloadAllExports = () => {
-    if (exportsList.length === 0) {
-      downloadError = 'Keine Protokolle zum Download.';
-      return;
+  const downloadProtocolExport = async (protocol) => {
+    let exp = exportsList.find((e) => e.protocolId === protocol.id);
+    if (!exp) {
+      const result = await exportToXlsx({
+        projectName: protocol.projectName,
+        protocolDate: protocol.protocolDate,
+        protocolDescription: protocol.protocolDescription,
+        columns: protocol.columns,
+        entries: protocol.entries
+      });
+      if (result) {
+        exp = await upsertExportByProtocol({
+          id: `export_${protocol.id}`,
+          protocolId: protocol.id,
+          createdAt: protocol.createdAt,
+          updatedAt: new Date().toISOString(),
+          filename: result.filename,
+          base64: result.base64,
+          projectName: protocol.projectName,
+          protocolDate: protocol.protocolDate
+        });
+        exportsList = await listExports();
+      }
     }
-    exportsList.forEach((exp) => downloadExport(exp));
+    if (exp) {
+      await downloadExport(exp);
+    }
   };
 
-  const toggleExportSelection = (id) => {
+
+  const toggleProtocolsSelection = (id) => {
+    const next = new Set(selectedProtocols);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    selectedProtocols = next;
+  };
+
+  const toggleExportsSelection = (id) => {
     const next = new Set(selectedExports);
     if (next.has(id)) {
       next.delete(id);
@@ -338,53 +546,78 @@
     selectedExports = next;
   };
 
+  const toggleSelectionModeProtocols = () => {
+    selectionModeProtocols = !selectionModeProtocols;
+    if (!selectionModeProtocols) {
+      selectedProtocols = new Set();
+    }
+  };
+
+  const toggleSelectionModeExports = () => {
+    selectionModeExports = !selectionModeExports;
+    if (!selectionModeExports) {
+      selectedExports = new Set();
+    }
+  };
+
+  const selectAllProtocols = () => {
+    selectedProtocols = new Set(protocolsList.map((p) => p.id));
+  };
+
   const selectAllExports = () => {
     selectedExports = new Set(exportsList.map((e) => e.id));
   };
 
-  const clearSelection = () => {
-    selectedExports = new Set();
-  };
-
-  const toggleSelectionMode = () => {
-    selectionMode = !selectionMode;
-    if (!selectionMode) {
-      clearSelection();
+  const downloadSelectedProtocols = async () => {
+    if (selectedProtocols.size === 0) {
+      downloadError = 'Keine Auswahl getroffen.';
+      return;
+    }
+    for (const protocol of protocolsList.filter((p) => selectedProtocols.has(p.id))) {
+      await downloadProtocolExport(protocol);
     }
   };
 
-  const downloadSelected = () => {
+  const downloadSelectedExports = async () => {
     if (selectedExports.size === 0) {
       downloadError = 'Keine Auswahl getroffen.';
       return;
     }
-    exportsList
-      .filter((e) => selectedExports.has(e.id))
-      .forEach((exp) => downloadExport(exp));
-  };
-
-  const removeExport = async (id) => {
-    await deleteExport(id);
-    exportsList = exportsList.filter((e) => e.id !== id);
-    if (selectedExports.has(id)) {
-      const next = new Set(selectedExports);
-      next.delete(id);
-      selectedExports = next;
+    for (const exp of exportsList.filter((e) => selectedExports.has(e.id))) {
+      await downloadExport(exp);
     }
   };
 
-  const removeSelectedExports = async () => {
-    if (selectedExports.size === 0) {
+  const deleteSelectedProtocols = async () => {
+    if (selectedProtocols.size === 0) {
       downloadError = 'Keine Auswahl getroffen.';
       return;
     }
-    const ok = window.confirm('Ausgewählte Protokolle wirklich löschen?');
+    const ok = window.confirm('Ausgewählte Vorgänge wirklich löschen?');
     if (!ok) return;
-    for (const id of selectedExports) {
-      await deleteExport(id);
+    for (const protocol of protocolsList.filter((p) => selectedProtocols.has(p.id))) {
+      await deleteProtocol(protocol.id);
+      await deleteExportsByProtocol(protocol.id);
     }
-    exportsList = exportsList.filter((e) => !selectedExports.has(e.id));
-    clearSelection();
+    protocolsList = await listProtocols();
+    exportsList = await listExports();
+    selectedProtocols = new Set();
+    selectionModeProtocols = false;
+  };
+
+  const deleteSelectedExports = async () => {
+    if (selectedExports.size === 0) {
+      downloadError = 'Keine Auswahl getroffen.';
+      return;
+    }
+    const ok = window.confirm('Ausgewählte Exporte wirklich löschen?');
+    if (!ok) return;
+    for (const exp of exportsList.filter((e) => selectedExports.has(e.id))) {
+      await deleteExportsByProtocol(exp.protocolId);
+    }
+    exportsList = await listExports();
+    selectedExports = new Set();
+    selectionModeExports = false;
   };
 
   function today() {
@@ -393,6 +626,16 @@
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const yyyy = String(now.getFullYear());
     return `${dd}-${mm}-${yyyy}`;
+  }
+
+  function buildFilename(name, date) {
+    const cleanName = sanitizeFilename(name || 'protokoll');
+    const cleanDate = sanitizeFilename(date || today());
+    return `${cleanName}_${cleanDate}.xlsx`;
+  }
+
+  function sanitizeFilename(value) {
+    return String(value).replace(/[^a-z0-9\\-_. ]/gi, '_').trim() || 'protokoll';
   }
 </script>
 
@@ -405,17 +648,22 @@
     </div>
   </header>
 
-  {#if view === 'start'}
+  {#if view === 'start' || view === 'edit-setup'}
     <section class="panel">
-      <h2>Protokoll erstellen</h2>
+      <h2>{view === 'edit-setup' ? 'Vorgang bearbeiten' : 'Protokoll erstellen'}</h2>
       <label class="field">
         <span>Projektname</span>
-        <input bind:value={projectName} placeholder="Trag den Projektnamen ein" />
+        <input bind:value={projectName} placeholder="Trag den Projektnamen ein" on:input={() => (isDirty = true)} />
       </label>
 
       <label class="field">
         <span>Beschreibung</span>
-        <input type="text" placeholder="Kurzbeschreibung" bind:value={protocolDescription} />
+        <input
+          type="text"
+          placeholder="Kurzbeschreibung"
+          bind:value={protocolDescription}
+          on:input={() => (isDirty = true)}
+        />
       </label>
 
       <label class="field">
@@ -471,15 +719,21 @@
       </div>
 
       <div class="cta-row">
-        <button class="primary" type="button" on:click={startProtocol}>Protokoll starten</button>
-        <button type="button" on:click={goToExports}>Protokolle anzeigen</button>
+        {#if view === 'edit-setup'}
+          <button class="primary" type="button" on:click={saveSetup}>Änderungen speichern</button>
+          <button type="button" on:click={() => (view = 'main')}>Zurück</button>
+        {:else}
+          <button class="primary" type="button" on:click={startProtocol}>Protokoll starten</button>
+        {/if}
+        <button type="button" on:click={goToProtocols}>Protokolle anzeigen</button>
+        <button type="button" on:click={goToExports}>Exports anzeigen</button>
       </div>
     </section>
   {/if}
 
   {#if view === 'main'}
     <section class="panel">
-      <h2>Protokoll läuft</h2>
+      <h2>{projectName || 'Protokoll'}</h2>
       <div class="summary">
         <div>
           <div class="label">Datum</div>
@@ -491,12 +745,13 @@
         </div>
         <div>
           <div class="label">Einträge</div>
-          <div>{totalEntries()}</div>
+          <div>{entries.length}</div>
         </div>
       </div>
 
       <div class="cta-row">
         <button class="primary" type="button" on:click={startEntry}>Eintrag machen</button>
+        <button type="button" on:click={() => (view = 'edit-setup')}>Stammdaten bearbeiten</button>
         <button type="button" disabled={isExporting} on:click={closeProtocol}>
           {isExporting ? 'Abschließen…' : 'Protokoll abschließen'}
         </button>
@@ -505,6 +760,58 @@
       {#if closeError}
         <p class="error">{closeError}</p>
       {/if}
+
+      <div class="entries">
+        {#if entries.length === 0}
+          <p class="muted">Noch keine Einträge.</p>
+        {:else}
+          {#each entries as e}
+            <div class="entry-card">
+              {#if e.photoPreview}
+                <img src={e.photoPreview} alt="Foto" />
+              {/if}
+              <div class="entry-body">
+                <div class="entry-date">{new Date(e.createdAt).toLocaleString()}</div>
+                <div class="entry-fields">
+                  {#each Object.entries(e.fields) as [key, value]}
+                    <div><strong>{key}:</strong> {value}</div>
+                  {/each}
+                </div>
+                <div class="entry-actions">
+                  <button type="button" on:click={() => editEntry(e)}>Bearbeiten</button>
+                  <button type="button" class="danger" on:click={() => removeEntryItem(e.id)}>Löschen</button>
+                </div>
+              </div>
+            </div>
+          {/each}
+        {/if}
+      </div>
+    </section>
+  {/if}
+
+  {#if view === 'protocol-view'}
+    <section class="panel">
+      <h2>{projectName || 'Protokoll'}</h2>
+      <div class="summary">
+        <div>
+          <div class="label">Datum</div>
+          <div>{protocolDate}</div>
+        </div>
+        <div>
+          <div class="label">Beschreibung</div>
+          <div>{protocolDescription || '—'}</div>
+        </div>
+        <div>
+          <div class="label">Einträge</div>
+          <div>{entries.length}</div>
+        </div>
+      </div>
+
+      <div class="cta-row">
+        <button class="primary" type="button" on:click={() => (view = 'main')}>Bearbeiten</button>
+        <button type="button" on:click={() => downloadProtocolExport(buildProtocolRecord())}>Download</button>
+        <button type="button" on:click={goToProtocols}>Zurück</button>
+      </div>
 
       <div class="entries">
         {#if entries.length === 0}
@@ -540,6 +847,7 @@
 
       {#if entryDraft.photoPreview}
         <img class="preview" src={entryDraft.photoPreview} alt="Vorschau" />
+        <button type="button" on:click={goToNextField}>Bild behalten</button>
       {/if}
 
       <button type="button" on:click={() => (view = 'main')}>Zurück</button>
@@ -554,9 +862,19 @@
           <label class="field">
             <span>{col.name}</span>
             {#if col.type === 'number'}
-              <input type="number" placeholder={col.name} bind:value={entryDraft.fields[col.name]} />
+              <input
+                type="number"
+                placeholder={col.name}
+                bind:value={entryDraft.fields[col.name]}
+                on:input={() => (isDirty = true)}
+              />
             {:else}
-              <input type="text" placeholder={col.name} bind:value={entryDraft.fields[col.name]} />
+              <input
+                type="text"
+                placeholder={col.name}
+                bind:value={entryDraft.fields[col.name]}
+                on:input={() => (isDirty = true)}
+              />
             {/if}
           </label>
         {/each}
@@ -574,29 +892,78 @@
     </section>
   {/if}
 
+  {#if view === 'protocols'}
+    <section class="panel">
+      <h2>Protokolle</h2>
+      {#if protocolsList.length === 0}
+        <p class="muted">Noch keine Protokolle vorhanden.</p>
+      {:else}
+        <div class="exports">
+          {#each protocolsList as protocol}
+            <div class="export-card">
+              {#if selectionModeProtocols}
+                <label class="export-select">
+                  <input
+                    type="checkbox"
+                    checked={selectedProtocols.has(protocol.id)}
+                    on:change={() => toggleProtocolsSelection(protocol.id)}
+                  />
+                </label>
+              {/if}
+              <div class="export-info">
+                <div class="export-name">{protocol.projectName || 'Ohne Namen'}</div>
+                <div class="export-meta">
+                  {protocol.protocolDate} · {protocol.protocolDescription || '—'} · {protocol.entries?.length || 0} Einträge
+                </div>
+              </div>
+              <div class="export-actions">
+                <button type="button" on:click={() => openProtocol(protocol.id)}>Öffnen</button>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
+      {#if protocolsList.length > 0}
+        <div class="cta-row">
+          <button type="button" on:click={toggleSelectionModeProtocols}>
+            {selectionModeProtocols ? 'Auswahl beenden' : 'Auswählen'}
+          </button>
+          {#if selectionModeProtocols}
+            <button type="button" on:click={downloadSelectedProtocols}>Auswahl herunterladen</button>
+            <button type="button" on:click={selectAllProtocols}>Alle auswählen</button>
+            <button type="button" class="danger" on:click={deleteSelectedProtocols}>Löschen</button>
+          {/if}
+        </div>
+      {/if}
+      <div class="cta-row">
+        <button type="button" on:click={goToStart}>Zur Startseite</button>
+        <button type="button" on:click={goToExports}>Exports anzeigen</button>
+      </div>
+    </section>
+  {/if}
 
   {#if view === 'exports'}
     <section class="panel">
-      <h2>Protokolle</h2>
+      <h2>Exports</h2>
       {#if exportsList.length === 0}
-        <p class="muted">Noch keine Protokolle vorhanden.</p>
+        <p class="muted">Noch keine Exporte vorhanden.</p>
       {:else}
         <div class="exports">
           {#each exportsList as exp}
             <div class="export-card">
-              {#if selectionMode}
+              {#if selectionModeExports}
                 <label class="export-select">
                   <input
                     type="checkbox"
                     checked={selectedExports.has(exp.id)}
-                    on:change={() => toggleExportSelection(exp.id)}
+                    on:change={() => toggleExportsSelection(exp.id)}
                   />
                 </label>
               {/if}
               <div class="export-info">
                 <div class="export-name">{exp.filename}</div>
                 <div class="export-meta">
-                  {new Date(exp.createdAt).toLocaleString()} · {exp.projectName} · {exp.protocolDate}
+                  {new Date(exp.updatedAt || exp.createdAt).toLocaleString()} · {exp.projectName} · {exp.protocolDate}
                 </div>
               </div>
               <div class="export-actions">
@@ -611,20 +978,36 @@
       {/if}
       {#if exportsList.length > 0}
         <div class="cta-row">
-          <button type="button" on:click={toggleSelectionMode}>
-            {selectionMode ? 'Auswahl beenden' : 'Auswählen'}
+          <button type="button" on:click={toggleSelectionModeExports}>
+            {selectionModeExports ? 'Auswahl beenden' : 'Auswählen'}
           </button>
-          {#if selectionMode}
-            <button type="button" on:click={downloadSelected}>Auswahl herunterladen</button>
+          {#if selectionModeExports}
+            <button type="button" on:click={downloadSelectedExports}>Auswahl herunterladen</button>
             <button type="button" on:click={selectAllExports}>Alle auswählen</button>
-            <button type="button" class="danger" on:click={removeSelectedExports}>Löschen</button>
+            <button type="button" class="danger" on:click={deleteSelectedExports}>Löschen</button>
           {/if}
         </div>
       {/if}
       <div class="cta-row">
         <button type="button" on:click={goToStart}>Zur Startseite</button>
+        <button type="button" on:click={goToProtocols}>Protokolle anzeigen</button>
       </div>
     </section>
+  {/if}
+
+  {#if confirmDialog.open}
+    <div class="modal-backdrop" on:click={closeConfirm}></div>
+    <div class="modal">
+      <h3>{confirmDialog.title}</h3>
+      <p class="muted">{confirmDialog.message}</p>
+      <div class="cta-row">
+        <button class="primary" type="button" on:click={confirmDialog.onPrimary}>Speichern</button>
+        <button class="danger" type="button" on:click={confirmDialog.onSecondary}>
+          {confirmDialog.secondaryLabel}
+        </button>
+        <button type="button" on:click={closeConfirm}>Abbrechen</button>
+      </div>
+    </div>
   {/if}
 </div>
 
@@ -663,14 +1046,6 @@
   .sub {
     margin: 0;
     color: var(--muted);
-  }
-
-  .badge {
-    background: var(--accent-2);
-    color: white;
-    padding: 10px 14px;
-    border-radius: 999px;
-    font-weight: 600;
   }
 
   .panel {
@@ -726,11 +1101,6 @@
     cursor: not-allowed;
   }
 
-  .wide {
-    width: 100%;
-    margin-top: 12px;
-  }
-
   .columns {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -772,18 +1142,6 @@
     display: grid;
     grid-template-columns: 1fr 150px 200px;
     gap: 10px;
-  }
-
-  .save-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 12px;
-  }
-
-  .saved {
-    color: var(--accent-2);
-    font-weight: 600;
   }
 
   .summary {
@@ -859,10 +1217,10 @@
     gap: 4px;
   }
 
-  .export-row {
+  .entry-actions {
     display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
   }
 
   .exports {
@@ -880,11 +1238,6 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
-  }
-
-  .export-select {
-    display: flex;
-    align-items: center;
   }
 
   .export-name {
@@ -916,12 +1269,6 @@
     background: #fff5f5;
   }
 
-  .export-hint {
-    margin-top: 4px;
-    font-size: 12px;
-    color: var(--muted);
-  }
-
   .muted {
     color: var(--muted);
   }
@@ -930,6 +1277,32 @@
     color: #b91c1c;
     font-weight: 600;
     margin-top: 8px;
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(4px);
+    z-index: 50;
+  }
+
+  .modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(520px, 92vw);
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    z-index: 60;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+  }
+
+  .modal h3 {
+    margin: 0 0 8px;
   }
 
   @media (max-width: 720px) {

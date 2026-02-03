@@ -25,6 +25,14 @@ export async function exportToXlsx({ projectName, protocolDate, protocolDescript
   return { filename, base64 };
 }
 
+export async function exportToXlsxData({ projectName, protocolDate, protocolDescription, columns, entries }) {
+  const workbook = await buildWorkbook({ projectName, protocolDate, protocolDescription, columns, entries });
+  const buffer = await workbook.xlsx.writeBuffer();
+  const filename = buildFilename(projectName, protocolDate);
+  const base64 = bufferToBase64(buffer);
+  return { filename, base64 };
+}
+
 export async function exportToXlsxShare({
   projectName,
   protocolDate,
