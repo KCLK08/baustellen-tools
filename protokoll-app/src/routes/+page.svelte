@@ -74,9 +74,11 @@
     width: 0,
     height: 0,
     offsetX: 0,
-    offsetY: 0
+    offsetY: 0,
+    fromIndex: null,
+    overIndex: null,
+    label: ''
   };
-  let draggingIndex = null;
 
   let protocolsList = [];
   let exportsList = [];
@@ -325,7 +327,6 @@
     const target = event.target;
     if (target?.closest?.('button, input, select, textarea')) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    draggingIndex = idx;
     dragState = {
       active: true,
       id: columns[idx]?.id ?? null,
@@ -334,7 +335,10 @@
       offsetX: event.clientX - rect.left,
       offsetY: event.clientY - rect.top,
       x: event.clientX - rect.left + 10,
-      y: event.clientY - rect.top + 10
+      y: event.clientY - rect.top + 10,
+      fromIndex: idx,
+      overIndex: idx,
+      label: columns[idx]?.name ?? ''
     };
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
@@ -349,17 +353,22 @@
     };
     const target = document.elementFromPoint(event.clientX, event.clientY);
     const card = target?.closest?.('.col-card');
-    if (!card) return;
+    if (!card) {
+      dragState = { ...dragState, overIndex: columns.length };
+      return;
+    }
     const idx = Number(card.dataset.index);
     if (Number.isNaN(idx)) return;
-    if (idx !== draggingIndex) {
-      reorderColumns(draggingIndex, idx);
-      draggingIndex = idx;
+    if (idx !== dragState.overIndex) {
+      dragState = { ...dragState, overIndex: idx };
     }
   };
 
   const endPointerDrag = () => {
     if (!dragState.active) return;
+    if (dragState.fromIndex !== null && dragState.overIndex !== null) {
+      reorderColumns(dragState.fromIndex, dragState.overIndex);
+    }
     dragState = {
       active: false,
       id: null,
@@ -368,9 +377,11 @@
       width: 0,
       height: 0,
       offsetX: 0,
-      offsetY: 0
+      offsetY: 0,
+      fromIndex: null,
+      overIndex: null,
+      label: ''
     };
-    draggingIndex = null;
   };
 
   const startProtocol = async () => {
@@ -903,6 +914,16 @@
 
 <svelte:window on:pointermove={movePointerDrag} on:pointerup={endPointerDrag} on:pointercancel={endPointerDrag} />
 <div class="page">
+  {#if dragState.active}
+    <div
+      class="drag-ghost"
+      style={`width: ${dragState.width}px; height: ${dragState.height}px; transform: translate3d(${dragState.x}px, ${dragState.y}px, 0);`}
+    >
+      <span class="drag-handle" aria-hidden="true">⋮⋮</span>
+      <div class="col-title">{dragState.label}</div>
+      <div class="col-meta">Spalte verschieben</div>
+    </div>
+  {/if}
   {#if updateAvailable}
     <div class="update-banner">
       <span>Neue Version verfügbar.</span>
@@ -1061,17 +1082,11 @@
         <h3>Spalten definieren</h3>
         <div class:dragging-list={dragState.active} class="columns">
           {#each columns as col, idx (col.id)}
-            <div
-              class:dragging={dragState.active && dragState.id === col.id}
-              class="col-card"
-              data-index={idx}
-              on:pointerdown={(event) => startPointerDrag(event, idx)}
-              style={
-                dragState.active && dragState.id === col.id
-                  ? `position: fixed; left: 0; top: 0; width: ${dragState.width}px; height: ${dragState.height}px; transform: translate3d(${dragState.x}px, ${dragState.y}px, 0); z-index: 20;`
-                  : ''
-              }
-            >
+            {#if dragState.active && dragState.overIndex === idx}
+              <div class="col-placeholder" style={`height: ${dragState.height}px;`}></div>
+            {/if}
+            {#if !(dragState.active && dragState.id === col.id)}
+              <div class="col-card" data-index={idx} on:pointerdown={(event) => startPointerDrag(event, idx)}>
               <span class="drag-handle" aria-hidden="true">⋮⋮</span>
               {#if editingColIndex === idx}
                 <div class="edit-col">
@@ -1098,7 +1113,11 @@
                 </div>
               {/if}
             </div>
+            {/if}
           {/each}
+          {#if dragState.active && dragState.overIndex === columns.length}
+            <div class="col-placeholder" style={`height: ${dragState.height}px;`}></div>
+          {/if}
         </div>
 
         <div class="add-row">
@@ -1564,6 +1583,28 @@
   .dragging-list {
     touch-action: none;
     user-select: none;
+  }
+
+  .drag-ghost {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 30;
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.12);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    pointer-events: none;
+  }
+
+  .col-placeholder {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    background: #f5f2ed;
   }
 
   .col-card.dragging {
