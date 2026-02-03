@@ -2,7 +2,6 @@
   import { onMount } from 'svelte';
   import { base } from '$app/paths';
   import { version as appVersion } from '$app/environment';
-  import { flip } from 'svelte/animate';
   import {
     addEntry,
     listEntries,
@@ -26,19 +25,22 @@
   import { compressImage, blobToObjectUrl } from '$lib/image';
   import { exportToXlsx, exportToXlsxData } from '$lib/export';
 
-  const defaultColumns = [
+  const generateId = () => `col_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const withColumnIds = (cols) => cols.map((col) => ({ id: col.id ?? generateId(), ...col }));
+
+  const defaultColumns = withColumnIds([
     { name: 'Bilder', type: 'text', isPhoto: true },
     { name: 'Kilometer', type: 'number', isPhoto: false },
     { name: 'Beschreibung', type: 'text', isPhoto: false },
     { name: 'Status', type: 'text', isPhoto: false }
-  ];
+  ]);
 
   let view = 'landing';
 
   let projectName = '';
   let protocolDate = today();
   let protocolDescription = '';
-  let columns = [...defaultColumns];
+  let columns = defaultColumns.map((col) => ({ ...col }));
 
   let newColName = '';
   let newColType = 'text';
@@ -51,7 +53,7 @@
   };
   let editingEntryId = null;
 
-  let fieldIndex = 0;
+  let stepIndex = 0;
 
   let templates = [];
   let selectedTemplateId = '';
@@ -61,13 +63,20 @@
   let formatMode = 'new';
   let formatReturnView = 'start';
   let formatBackup = null;
-  let dragIndex = null;
   let editingColIndex = null;
   let editColName = '';
   let editColType = 'text';
-  let touchDragIndex = null;
-  let touchDragging = false;
-  let touchTimer = null;
+  let dragState = {
+    active: false,
+    id: null,
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    offsetX: 0,
+    offsetY: 0
+  };
+  let draggingIndex = null;
 
   let protocolsList = [];
   let exportsList = [];
@@ -102,7 +111,7 @@
     const saved = await loadSettings();
     if (saved) {
       protocolDescription = saved.protocolDescription ?? protocolDescription;
-      columns = saved.columns ?? columns;
+      columns = withColumnIds(saved.columns ?? columns);
       selectedTemplateId = saved.selectedTemplateId ?? selectedTemplateId;
     }
     projectName = '';
@@ -169,16 +178,16 @@
 
   const addColumn = () => {
     if (!newColName.trim()) return;
-    columns = [...columns, { name: newColName.trim(), type: newColType, isPhoto: false }];
+    columns = [...columns, { id: generateId(), name: newColName.trim(), type: newColType, isPhoto: false }];
     newColName = '';
     newColType = 'text';
     isDirty = true;
   };
 
-  const removeColumn = (name) => {
-    const target = columns.find((c) => c.name === name);
+  const removeColumn = (id) => {
+    const target = columns.find((c) => c.id === id);
     if (!target || target.isPhoto) return;
-    columns = columns.filter((c) => c.name !== name);
+    columns = columns.filter((c) => c.id !== id);
     isDirty = true;
   };
 
@@ -186,7 +195,7 @@
     if (!selectedTemplateId) return;
     const tpl = templates.find((t) => t.id === selectedTemplateId);
     if (!tpl) return;
-    columns = tpl.columns?.length ? tpl.columns : columns;
+    columns = tpl.columns?.length ? withColumnIds(tpl.columns) : columns;
     isDirty = true;
     persistSettings();
     isCreatingFormat = false;
@@ -224,7 +233,7 @@
     formatMode = 'new';
     selectedTemplateId = '';
     templateName = '';
-    columns = [defaultColumns[0]];
+    columns = [{ ...defaultColumns[0] }];
     newColName = '';
     newColType = 'text';
     view = 'format-builder';
@@ -310,32 +319,58 @@
     editColType = 'text';
   };
 
-  const startTouchDrag = (idx) => {
-    clearTimeout(touchTimer);
-    touchDragIndex = idx;
-    touchTimer = setTimeout(() => {
-      touchDragging = true;
-    }, 250);
+  const startPointerDrag = (event, idx) => {
+    if (editingColIndex === idx) return;
+    if (event.button !== undefined && event.button !== 0) return;
+    const target = event.target;
+    if (target?.closest?.('button, input, select, textarea')) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    draggingIndex = idx;
+    dragState = {
+      active: true,
+      id: columns[idx]?.id ?? null,
+      width: rect.width,
+      height: rect.height,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      x: event.clientX - rect.left + 10,
+      y: event.clientY - rect.top + 10
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
   };
 
-  const moveTouchDrag = (event) => {
-    if (!touchDragging) return;
+  const movePointerDrag = (event) => {
+    if (!dragState.active) return;
     event.preventDefault();
-    const touch = event.touches?.[0];
-    if (!touch) return;
-    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+    dragState = {
+      ...dragState,
+      x: event.clientX - dragState.offsetX + 10,
+      y: event.clientY - dragState.offsetY + 10
+    };
+    const target = document.elementFromPoint(event.clientX, event.clientY);
     const card = target?.closest?.('.col-card');
     if (!card) return;
     const idx = Number(card.dataset.index);
     if (Number.isNaN(idx)) return;
-    reorderColumns(touchDragIndex, idx);
-    touchDragIndex = idx;
+    if (idx !== draggingIndex) {
+      reorderColumns(draggingIndex, idx);
+      draggingIndex = idx;
+    }
   };
 
-  const endTouchDrag = () => {
-    clearTimeout(touchTimer);
-    touchDragging = false;
-    touchDragIndex = null;
+  const endPointerDrag = () => {
+    if (!dragState.active) return;
+    dragState = {
+      active: false,
+      id: null,
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      offsetX: 0,
+      offsetY: 0
+    };
+    draggingIndex = null;
   };
 
   const startProtocol = async () => {
@@ -362,7 +397,7 @@
     projectName = protocol.projectName || '';
     protocolDate = protocol.protocolDate || today();
     protocolDescription = protocol.protocolDescription || '';
-    columns = protocol.columns?.length ? protocol.columns : [...defaultColumns];
+    columns = protocol.columns?.length ? withColumnIds(protocol.columns) : defaultColumns.map((col) => ({ ...col }));
     entries = (protocol.entries || []).map((e) => ({
       ...e,
       photoPreview: e.photoBlob ? blobToObjectUrl(e.photoBlob) : ''
@@ -386,8 +421,12 @@
   const startEntry = () => {
     editingEntryId = null;
     entryDraft = { fields: {}, photoFile: null, photoPreview: '' };
-    fieldIndex = 0;
-    view = 'photo';
+    stepIndex = 0;
+    if (!columns.length) {
+      finalizeEntry();
+      return;
+    }
+    view = columns[0].isPhoto ? 'photo' : 'field';
   };
 
   const editEntry = (entry) => {
@@ -397,8 +436,12 @@
       photoFile: entry.photoBlob ?? null,
       photoPreview: entry.photoPreview ?? ''
     };
-    fieldIndex = 0;
-    view = 'field';
+    stepIndex = 0;
+    if (!columns.length) {
+      finalizeEntry();
+      return;
+    }
+    view = columns[0].isPhoto ? 'photo' : 'field';
   };
 
   const removeEntryItem = async (entryId) => {
@@ -414,24 +457,28 @@
     entryDraft.photoFile = compressed;
     entryDraft.photoPreview = blobToObjectUrl(compressed);
     isDirty = true;
-    goToNextField();
+    await goNextStep();
   };
 
-  const fieldColumns = () => columns.filter((c) => !c.isPhoto);
+  const currentStep = () => columns[stepIndex];
 
-  const goToNextField = () => {
-    if (fieldColumns().length === 0) {
-      finalizeEntry();
-      return;
-    }
-    view = 'field';
+  const goToStep = (idx) => {
+    stepIndex = idx;
+    const col = columns[idx];
+    view = col?.isPhoto ? 'photo' : 'field';
   };
 
-  const nextField = async () => {
-    if (fieldIndex < fieldColumns().length - 1) {
-      fieldIndex += 1;
+  const goNextStep = async () => {
+    if (stepIndex < columns.length - 1) {
+      goToStep(stepIndex + 1);
     } else {
       await finalizeEntry();
+    }
+  };
+
+  const goPrevStep = () => {
+    if (stepIndex > 0) {
+      goToStep(stepIndex - 1);
     }
   };
 
@@ -470,7 +517,7 @@
       isDirty = true;
       entryDraft = { fields: {}, photoFile: null, photoPreview: '' };
       editingEntryId = null;
-      fieldIndex = 0;
+      stepIndex = 0;
       view = 'main';
     } catch (err) {
       saveError = 'Speichern fehlgeschlagen. Bitte erneut versuchen.';
@@ -595,7 +642,7 @@
     projectName = '';
     protocolDate = today();
     protocolDescription = '';
-    columns = [...defaultColumns];
+    columns = defaultColumns.map((col) => ({ ...col }));
     activeProtocolId = null;
     activeProtocolCreatedAt = null;
     isDirty = false;
@@ -855,6 +902,7 @@
 </script>
 
 <div class="page">
+  <svelte:window on:pointermove={movePointerDrag} on:pointerup={endPointerDrag} on:pointercancel={endPointerDrag} />
   {#if updateAvailable}
     <div class="update-banner">
       <span>Neue Version verfügbar.</span>
@@ -917,7 +965,17 @@
       </div>
 
       <div class="section">
-        <h3>Tabellenformat</h3>
+        <h3>
+          Tabellenformat
+          <button
+            class="info-button"
+            type="button"
+            aria-label="Info zum Tabellenformat"
+            title="Hier legst du fest, welche Spalten in der Excel-Datei erscheinen. Wähle ein vorhandenes Format oder erstelle ein neues."
+          >
+            i
+          </button>
+        </h3>
 
         <div class="grid">
           <label class="field">
@@ -1001,26 +1059,18 @@
 
       <div class="section">
         <h3>Spalten definieren</h3>
-        <div class="columns">
-          {#each columns as col, idx (col.name)}
+        <div class:dragging-list={dragState.active} class="columns">
+          {#each columns as col, idx (col.id)}
             <div
-              class:dragging={dragIndex === idx}
-              class:touch-dragging={touchDragging}
+              class:dragging={dragState.active && dragState.id === col.id}
               class="col-card"
-              draggable="true"
               data-index={idx}
-              animate:flip={{ duration: 180 }}
-              on:dragstart={() => (dragIndex = idx)}
-              on:dragend={() => (dragIndex = null)}
-              on:dragover|preventDefault
-              on:drop={() => {
-                reorderColumns(dragIndex, idx);
-                dragIndex = null;
-              }}
-              on:touchstart={() => startTouchDrag(idx)}
-              on:touchmove|preventDefault={moveTouchDrag}
-              on:touchend={endTouchDrag}
-              on:touchcancel={endTouchDrag}
+              on:pointerdown={(event) => startPointerDrag(event, idx)}
+              style={
+                dragState.active && dragState.id === col.id
+                  ? `position: fixed; left: 0; top: 0; width: ${dragState.width}px; height: ${dragState.height}px; transform: translate3d(${dragState.x}px, ${dragState.y}px, 0); z-index: 20;`
+                  : ''
+              }
             >
               <span class="drag-handle" aria-hidden="true">⋮⋮</span>
               {#if editingColIndex === idx}
@@ -1041,7 +1091,7 @@
                 <div class="col-actions">
                   <button type="button" on:click={() => startEditColumn(idx)}>Bearbeiten</button>
                   {#if !col.isPhoto}
-                    <button type="button" on:click={() => removeColumn(col.name)}>Spalte entfernen</button>
+                    <button type="button" on:click={() => removeColumn(col.id)}>Spalte entfernen</button>
                   {:else}
                     <span class="photo-pill">Foto-Spalte</span>
                   {/if}
@@ -1188,14 +1238,14 @@
 
       {#if entryDraft.photoPreview}
         <img class="preview" src={entryDraft.photoPreview} alt="Vorschau" />
-        <button type="button" on:click={goToNextField}>Weiter</button>
       {/if}
 
       <div class="cta-row">
-        <button type="button" on:click={() => (view = 'main')}>Zurück</button>
-        {#if !entryDraft.photoPreview}
-          <button class="primary" type="button" on:click={goToNextField}>Weiter ohne Bild</button>
-        {/if}
+        <button type="button" on:click={goPrevStep} disabled={stepIndex === 0}>Zurück</button>
+        <button type="button" on:click={() => (view = 'main')}>Abbrechen</button>
+        <button class="primary" type="button" on:click={goNextStep}>
+          {stepIndex < columns.length - 1 ? 'Weiter' : 'Speichern'}
+        </button>
       </div>
     </section>
   {/if}
@@ -1203,42 +1253,36 @@
   {#if view === 'field'}
     <section class="panel">
       <h2>Eintrag</h2>
-      {#if fieldColumns().length > 0}
-        {#each [fieldColumns()[fieldIndex]] as col}
-          <label class="field">
-            <span>{col.name}</span>
-            {#if col.type === 'number'}
-              <input
-                type="number"
-                placeholder={col.name}
-                bind:value={entryDraft.fields[col.name]}
-                on:input={() => (isDirty = true)}
-              />
-            {:else}
-              <input
-                type="text"
-                placeholder={col.name}
-                bind:value={entryDraft.fields[col.name]}
-                on:input={() => (isDirty = true)}
-              />
-            {/if}
-          </label>
-        {/each}
-
-        <div class="cta-row">
-          {#if fieldIndex === 0}
-            <button type="button" on:click={() => (view = 'photo')}>Zurück</button>
+      {#if currentStep()}
+        <label class="field">
+          <span>{currentStep().name}</span>
+          {#if currentStep().type === 'number'}
+            <input
+              type="number"
+              placeholder={currentStep().name}
+              bind:value={entryDraft.fields[currentStep().name]}
+              on:input={() => (isDirty = true)}
+            />
           {:else}
-            <button type="button" on:click={() => (fieldIndex -= 1)}>Zurück</button>
+            <input
+              type="text"
+              placeholder={currentStep().name}
+              bind:value={entryDraft.fields[currentStep().name]}
+              on:input={() => (isDirty = true)}
+            />
           {/if}
-          <button type="button" on:click={() => (view = 'main')}>Abbrechen</button>
-          <button class="primary" type="button" disabled={isSaving} on:click={nextField}>
-            {fieldIndex < fieldColumns().length - 1 ? 'Weiter' : 'Speichern'}
-          </button>
-        </div>
-        {#if saveError}
-          <p class="error">{saveError}</p>
-        {/if}
+        </label>
+      {/if}
+
+      <div class="cta-row">
+        <button type="button" on:click={goPrevStep} disabled={stepIndex === 0}>Zurück</button>
+        <button type="button" on:click={() => (view = 'main')}>Abbrechen</button>
+        <button class="primary" type="button" disabled={isSaving} on:click={goNextStep}>
+          {stepIndex < columns.length - 1 ? 'Weiter' : 'Speichern'}
+        </button>
+      </div>
+      {#if saveError}
+        <p class="error">{saveError}</p>
       {/if}
     </section>
   {/if}
@@ -1517,14 +1561,16 @@
     cursor: grabbing;
   }
 
-  .col-card.dragging {
-    opacity: 0.6;
-    border-style: solid;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  .dragging-list {
+    touch-action: none;
+    user-select: none;
   }
 
-  .col-card.touch-dragging {
-    touch-action: none;
+  .col-card.dragging {
+    opacity: 0.95;
+    border-style: solid;
+    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.12);
+    pointer-events: none;
   }
 
   .drag-handle {
@@ -1645,6 +1691,24 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--muted);
+  }
+
+  .info-button {
+    margin-left: 8px;
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1;
+    padding: 0;
+  }
+
+  .info-button:hover {
+    color: var(--ink);
+    border-color: var(--ink);
   }
 
   .cta-row {
