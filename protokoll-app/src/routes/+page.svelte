@@ -1,5 +1,7 @@
 <script>
   import { onMount } from 'svelte';
+  import { base } from '$app/paths';
+  import { version as appVersion } from '$app/environment';
   import {
     addEntry,
     listEntries,
@@ -68,6 +70,7 @@
   let selectedProtocols = new Set();
   let selectionModeExports = false;
   let selectedExports = new Set();
+  let updateAvailable = false;
   let confirmDialog = {
     open: false,
     title: '',
@@ -77,6 +80,8 @@
     onPrimary: null,
     onSecondary: null
   };
+  let lastView = view;
+  let suppressHistory = false;
 
   onMount(async () => {
     const saved = await loadSettings();
@@ -97,7 +102,51 @@
     templates = await listTemplates();
     protocolsList = await listProtocols();
     exportsList = await listExports();
+
+    const checkForUpdate = async () => {
+      try {
+        const res = await fetch(`${base}/_app/version.json`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.version && data.version !== appVersion) {
+          updateAvailable = true;
+        }
+      } catch {
+        // ignore network errors
+      }
+    };
+
+    await checkForUpdate();
+    const interval = setInterval(checkForUpdate, 300000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') checkForUpdate();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    const onPopState = (event) => {
+      if (event.state?.view) {
+        suppressHistory = true;
+        view = event.state.view;
+        lastView = view;
+        suppressHistory = false;
+      }
+    };
+    history.replaceState({ view }, '');
+    window.addEventListener('popstate', onPopState);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('popstate', onPopState);
+    };
   });
+
+  $: if (view !== lastView) {
+    if (!suppressHistory) {
+      history.pushState({ view }, '');
+    }
+    lastView = view;
+  }
 
   const persistSettings = async () => {
     await saveSettings({ projectName, protocolDate, protocolDescription, columns, selectedTemplateId });
@@ -643,6 +692,12 @@
 </script>
 
 <div class="page">
+  {#if updateAvailable}
+    <div class="update-banner">
+      <span>Neue Version verfügbar.</span>
+      <button type="button" class="primary" on:click={() => location.reload()}>Aktualisieren</button>
+    </div>
+  {/if}
   <header class="hero">
     <div>
       <p class="eyebrow">Baustellen Tool</p>
@@ -651,7 +706,7 @@
     </div>
     {#if view === 'start' || view === 'edit-setup'}
       <button class="toolbox-link" type="button" on:click={() => (view = 'landing')}>Zur Startseite</button>
-    {:else}
+    {:else if view === 'landing'}
       <a class="toolbox-link" href="/baustellen-tools/">Zur Toolbox</a>
     {/if}
   </header>
@@ -869,10 +924,15 @@
 
       {#if entryDraft.photoPreview}
         <img class="preview" src={entryDraft.photoPreview} alt="Vorschau" />
-        <button type="button" on:click={goToNextField}>Bild behalten</button>
+        <button type="button" on:click={goToNextField}>Weiter</button>
       {/if}
 
-      <button type="button" on:click={() => (view = 'main')}>Zurück</button>
+      <div class="cta-row">
+        <button type="button" on:click={() => (view = 'main')}>Zurück</button>
+        {#if !entryDraft.photoPreview}
+          <button class="primary" type="button" on:click={goToNextField}>Weiter ohne Bild</button>
+        {/if}
+      </div>
     </section>
   {/if}
 
@@ -902,6 +962,11 @@
         {/each}
 
         <div class="cta-row">
+          {#if fieldIndex === 0}
+            <button type="button" on:click={() => (view = 'photo')}>Zurück</button>
+          {:else}
+            <button type="button" on:click={() => (fieldIndex -= 1)}>Zurück</button>
+          {/if}
           <button type="button" on:click={() => (view = 'main')}>Abbrechen</button>
           <button class="primary" type="button" disabled={isSaving} on:click={nextField}>
             {fieldIndex < fieldColumns().length - 1 ? 'Weiter' : 'Speichern'}
@@ -1087,6 +1152,20 @@
     padding: 20px;
     margin-bottom: 20px;
     box-shadow: 0 12px 30px rgba(23, 21, 18, 0.08);
+  }
+
+  .update-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: #fff7ed;
+    color: #7c2d12;
+    margin-bottom: 16px;
+    font-weight: 600;
   }
 
   .landing {
