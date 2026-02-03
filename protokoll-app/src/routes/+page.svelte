@@ -945,7 +945,7 @@
       class="drag-ghost"
       style={`width: ${dragState.width}px; height: ${dragState.height}px; transform: translate3d(${dragState.x}px, ${dragState.y}px, 0);`}
     >
-      <span class="drag-handle" aria-hidden="true">⋮⋮</span>
+      <span class="drag-handle ghost" aria-hidden="true">⋮⋮</span>
       <div class="col-title">{dragState.label}</div>
       <div class="col-meta">Spalte verschieben</div>
     </div>
@@ -1118,15 +1118,18 @@
               <div class="col-placeholder" style={`height: ${dragState.height}px;`}></div>
             {/if}
             {#if !(dragState.active && dragState.id === col.id)}
-              <div
-                class="col-card"
-                data-index={idx}
+              <div class="col-card" data-index={idx}>
+              <button
+                class="drag-handle"
+                type="button"
+                aria-label="Spalte verschieben"
                 on:pointerdown={(event) => {
                   event.preventDefault();
                   startPointerDrag(event, idx);
                 }}
               >
-              <span class="drag-handle" aria-hidden="true">⋮⋮</span>
+                ⋮⋮
+              </button>
               {#if editingColIndex === idx}
                 <div class="edit-col">
                   <input bind:value={editColName} placeholder="Spaltenname" />
@@ -1660,11 +1663,23 @@
 
   .drag-handle {
     position: absolute;
-    top: 8px;
-    right: 10px;
+    top: 10px;
+    right: 12px;
     color: var(--muted);
-    font-size: 14px;
+    font-size: 18px;
     letter-spacing: -2px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    line-height: 1;
+    cursor: grab;
+  }
+
+  .drag-handle.ghost {
+    position: static;
+    align-self: flex-end;
+    margin-bottom: -6px;
+    cursor: default;
   }
 
   .col-actions {
