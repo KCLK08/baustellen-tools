@@ -789,6 +789,7 @@
       downloadError = 'Download nicht verfügbar.';
       return;
     }
+    downloadError = '';
     const byteString = atob(exp.base64);
     const bytes = new Uint8Array(byteString.length);
     for (let i = 0; i < byteString.length; i += 1) {
@@ -805,13 +806,18 @@
           return;
         }
       } catch (err) {
-        if (err?.name !== 'NotAllowedError') {
-          console.error(err);
-        }
+        if (err?.name !== 'NotAllowedError') console.error(err);
       }
     }
 
     const url = URL.createObjectURL(blob);
+    if (isPwa() || isAndroid()) {
+      // On Android/PWA, direct download is often blocked — open the file so the user can save it.
+      window.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return;
+    }
+
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.download = filename;
@@ -821,9 +827,6 @@
     anchor.click();
     anchor.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
-    if (!anchor.download) {
-      window.open(url, '_blank', 'noopener');
-    }
   };
 
   const downloadProtocolExport = async (protocol) => {
@@ -965,6 +968,14 @@
 
   function sanitizeFilename(value) {
     return String(value).replace(/[^a-z0-9\\-_. ]/gi, '_').trim() || 'protokoll';
+  }
+
+  function isPwa() {
+    return window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator?.standalone;
+  }
+
+  function isAndroid() {
+    return /Android/i.test(navigator.userAgent || '');
   }
 </script>
 
