@@ -811,10 +811,10 @@
     const filename = buildFilename(exp.projectName, exp.protocolDate);
 
     let shared = false;
-    if (navigator?.canShare) {
+    if (navigator?.share) {
       try {
         const file = new File([blob], filename, { type: blob.type });
-        if (navigator.canShare({ files: [file] })) {
+        if (!navigator?.canShare || navigator.canShare({ files: [file] })) {
           await navigator.share({ files: [file], title: filename, text: 'Baustellen-Protokoll' });
           shared = true;
         }
