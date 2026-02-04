@@ -418,6 +418,10 @@
   }
 
   const startProtocol = async () => {
+    if (!selectedTemplateId) {
+      saveError = 'Bitte zuerst ein Tabellenformat auswählen.';
+      return;
+    }
     activeProtocolId = null;
     activeProtocolCreatedAt = null;
     await clearEntries();
@@ -1146,9 +1150,14 @@
           <button class="primary" type="button" on:click={saveSetup}>Änderungen speichern</button>
           <button type="button" on:click={() => (view = 'main')}>Zurück</button>
         {:else}
-          <button class="primary full-width" type="button" on:click={startProtocol}>Protokoll starten</button>
+          <button class="primary full-width" type="button" on:click={startProtocol} disabled={!selectedTemplateId}>
+            Protokoll starten
+          </button>
         {/if}
       </div>
+      {#if !selectedTemplateId}
+        <p class="error">Bitte zuerst ein Tabellenformat auswählen.</p>
+      {/if}
     </section>
   {/if}
 

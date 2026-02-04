@@ -58,8 +58,11 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
   const worksheet = workbook.addWorksheet('Protokoll');
 
   const totalCols = 1 + columns.length;
-  const photoColWidth = 24;
-  const rowHeight = 120;
+  const marginPx = 6;
+  const minCellWidthPx = 160;
+  const minCellHeightPx = 110;
+  const pxPerCol = 7;
+  const pxPerRow = 1.33;
 
   worksheet.addRow([`Projekt: ${projectName || ''}`]);
   worksheet.addRow([`Datum: ${protocolDate || ''}`]);
@@ -76,6 +79,21 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
   const headerStartRow = 5;
   const photoColumn = columns.find((c) => c.isPhoto);
   const photoColIndex = photoColumn ? columns.indexOf(photoColumn) + 2 : null;
+  const photoCache = new Map();
+  let maxImgW = 0;
+  let maxImgH = 0;
+  for (const entry of entries) {
+    if (!entry.photoBlob) continue;
+    const dataUrl = await blobToDataUrl(entry.photoBlob);
+    const { width, height } = await getImageSize(dataUrl);
+    photoCache.set(entry.id, { dataUrl, width, height });
+    maxImgW = Math.max(maxImgW, width || 0);
+    maxImgH = Math.max(maxImgH, height || 0);
+  }
+  const cellWidthPx = Math.max(minCellWidthPx, maxImgW + marginPx * 2);
+  const cellHeightPx = Math.max(minCellHeightPx, maxImgH + marginPx * 2);
+  const photoColWidth = Math.ceil(cellWidthPx / pxPerCol);
+  const rowHeight = Math.ceil(cellHeightPx / pxPerRow);
   const headerRowValues = ['Nr.', ...columns.map((col) => col.name)];
 
   worksheet.spliceRows(headerStartRow, 0, headerRowValues);
@@ -118,7 +136,8 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
     });
 
     if (photoColIndex && entry.photoBlob) {
-      const dataUrl = await blobToDataUrl(entry.photoBlob);
+      const cached = photoCache.get(entry.id);
+      const dataUrl = cached?.dataUrl || (await blobToDataUrl(entry.photoBlob));
       const base64 = stripDataUrlPrefix(dataUrl);
       const extension = getImageExtension(entry.photoBlob.type);
       const imageId = workbook.addImage({
@@ -126,13 +145,11 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
         extension
       });
 
-      const { width: imgW, height: imgH } = await getImageSize(dataUrl);
-      const cellWidthPx = photoColWidth * 7;
-      const cellHeightPx = rowHeight * 1.33;
-      const marginPx = 6;
+      const imgW = cached?.width || 1;
+      const imgH = cached?.height || 1;
       const maxW = Math.max(1, cellWidthPx - marginPx * 2);
       const maxH = Math.max(1, cellHeightPx - marginPx * 2);
-      const scale = Math.min(maxW / imgW, maxH / imgH, 1);
+      const scale = Math.min(maxW / imgW, maxH / imgH);
       const scaledW = imgW * scale;
       const scaledH = imgH * scale;
       const offsetXPx = (cellWidthPx - scaledW) / 2;
