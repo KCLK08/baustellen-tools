@@ -813,8 +813,15 @@
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.download = filename;
+    anchor.rel = 'noopener';
+    anchor.target = '_blank';
+    document.body.appendChild(anchor);
     anchor.click();
+    anchor.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
+    if (!anchor.download) {
+      window.open(url, '_blank', 'noopener');
+    }
   };
 
   const downloadProtocolExport = async (protocol) => {
