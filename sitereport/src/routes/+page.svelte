@@ -810,24 +810,29 @@
     const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const filename = buildFilename(exp.projectName, exp.protocolDate);
 
+    let shared = false;
     if (navigator?.canShare) {
       try {
         const file = new File([blob], filename, { type: blob.type });
         if (navigator.canShare({ files: [file] })) {
           await navigator.share({ files: [file], title: filename, text: 'Baustellen-Protokoll' });
-          return;
+          shared = true;
         }
       } catch (err) {
         if (err?.name !== 'NotAllowedError') console.error(err);
       }
     }
 
-    if (isAndroid()) {
-      downloadError = 'Auf Android bitte über "Teilen" speichern, damit der Dateiname korrekt bleibt.';
+    const url = URL.createObjectURL(blob);
+    if (shared) {
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
       return;
     }
-
-    const url = URL.createObjectURL(blob);
+    if (isAndroid()) {
+      window.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return;
+    }
 
     const anchor = document.createElement('a');
     anchor.href = url;
