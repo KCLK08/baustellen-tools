@@ -146,6 +146,10 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
         cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
       }
     });
+    if (photoColIndex) {
+      const cell = row.getCell(photoColIndex);
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    }
 
     if (photoColIndex && entry.photoBlob) {
       const cached = photoCache.get(entry.id);
