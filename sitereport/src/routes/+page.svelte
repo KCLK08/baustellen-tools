@@ -822,13 +822,12 @@
       }
     }
 
-    const url = URL.createObjectURL(blob);
-    if (isPwa() || isAndroid()) {
-      // On Android/PWA, direct download is often blocked — open the file so the user can save it.
-      window.location.href = url;
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    if (isAndroid()) {
+      downloadError = 'Auf Android bitte über "Teilen" speichern, damit der Dateiname korrekt bleibt.';
       return;
     }
+
+    const url = URL.createObjectURL(blob);
 
     const anchor = document.createElement('a');
     anchor.href = url;
