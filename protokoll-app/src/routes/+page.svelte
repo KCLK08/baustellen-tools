@@ -101,6 +101,8 @@
   let selectionModeExports = false;
   let selectedExports = new Set();
   let updateAvailable = false;
+  let toastMessage = '';
+  let toastTimer = null;
   let confirmDialog = {
     open: false,
     title: '',
@@ -716,7 +718,7 @@
       open: true,
       title: 'Protokoll verlassen',
       message: 'Möchtest du die aktuellen Daten speichern oder verwerfen?',
-      primaryLabel: 'Speichern',
+      primaryLabel: 'Ja',
       secondaryLabel: 'Verwerfen',
       onPrimary: async () => {
         const protocolRecord = buildProtocolRecord();
@@ -745,6 +747,7 @@
         await resetProtocol();
         view = 'protocols';
         isDirty = false;
+        showToast('Gespeichert');
         closeConfirm();
       },
       onSecondary: async () => {
@@ -752,6 +755,14 @@
         closeConfirm();
       }
     };
+  };
+
+  const showToast = (message) => {
+    toastMessage = message;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toastMessage = '';
+    }, 2000);
   };
 
   const closeConfirm = () => {
@@ -1499,13 +1510,19 @@
       <h3>{confirmDialog.title}</h3>
       <p class="muted">{confirmDialog.message}</p>
       <div class="cta-row">
-        <button class="primary" type="button" on:click={confirmDialog.onPrimary}>Speichern</button>
+        <button class="primary" type="button" on:click={confirmDialog.onPrimary}>
+          {confirmDialog.primaryLabel || 'OK'}
+        </button>
         <button class="danger" type="button" on:click={confirmDialog.onSecondary}>
           {confirmDialog.secondaryLabel}
         </button>
         <button type="button" on:click={closeConfirm}>Abbrechen</button>
       </div>
     </div>
+  {/if}
+
+  {#if toastMessage}
+    <div class="toast">{toastMessage}</div>
   {/if}
 </div>
 
@@ -1863,6 +1880,20 @@
     color: var(--ink);
     font-size: 13px;
     box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+  }
+
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: #1f2937;
+    color: white;
+    font-size: 13px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+    z-index: 40;
   }
 
   .cta-row {
