@@ -58,13 +58,8 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
   const worksheet = workbook.addWorksheet('Protokoll');
 
   const totalCols = 1 + columns.length;
-  const marginPx = 6;
-  const minCellWidthPx = 160;
-  const minCellHeightPx = 110;
-  const colPx = (colWidth) => colWidth * 7 + 5;
-  const rowPx = (rowHeightPts) => rowHeightPts * (96 / 72);
-  const colWidthFromPx = (px) => Math.max(1, Math.round((px - 5) / 7));
-  const rowHeightFromPx = (px) => Math.max(1, Math.round(px / (96 / 72)));
+  const photoColWidth = 34;
+  const rowHeight = 120;
 
   worksheet.addRow([`Projekt: ${projectName || ''}`]);
   worksheet.addRow([`Datum: ${protocolDate || ''}`]);
@@ -81,24 +76,6 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
   const headerStartRow = 5;
   const photoColumn = columns.find((c) => c.isPhoto);
   const photoColIndex = photoColumn ? columns.indexOf(photoColumn) + 2 : null;
-  const photoCache = new Map();
-  let maxImgW = 0;
-  let maxImgH = 0;
-  for (const entry of entries) {
-    if (!entry.photoBlob) continue;
-    const dataUrl = await blobToDataUrl(entry.photoBlob);
-    const { width, height } = await getImageSize(dataUrl);
-    photoCache.set(entry.id, { dataUrl, width, height });
-    maxImgW = Math.max(maxImgW, width || 0);
-    maxImgH = Math.max(maxImgH, height || 0);
-  }
-  const maxAspect = maxImgH ? maxImgW / maxImgH : 1;
-  const desiredCellHeightPx = Math.max(minCellHeightPx, maxImgH + marginPx * 2);
-  const desiredCellWidthPx = Math.max(minCellWidthPx, desiredCellHeightPx * maxAspect);
-  const photoColWidth = colWidthFromPx(desiredCellWidthPx);
-  const rowHeight = rowHeightFromPx(desiredCellHeightPx);
-  const cellWidthPx = colPx(photoColWidth);
-  const cellHeightPx = rowPx(rowHeight);
   const headerRowValues = ['Nr.', ...columns.map((col) => col.name)];
 
   worksheet.spliceRows(headerStartRow, 0, headerRowValues);
@@ -141,8 +118,7 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
     });
 
     if (photoColIndex && entry.photoBlob) {
-      const cached = photoCache.get(entry.id);
-      const dataUrl = cached?.dataUrl || (await blobToDataUrl(entry.photoBlob));
+      const dataUrl = await blobToDataUrl(entry.photoBlob);
       const base64 = stripDataUrlPrefix(dataUrl);
       const extension = getImageExtension(entry.photoBlob.type);
       const imageId = workbook.addImage({
@@ -150,22 +126,9 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
         extension
       });
 
-      const imgW = cached?.width || 1;
-      const imgH = cached?.height || 1;
-      const maxW = Math.max(1, cellWidthPx - marginPx * 2);
-      const maxH = Math.max(1, cellHeightPx - marginPx * 2);
-      const scale = Math.min(maxW / imgW, maxH / imgH);
-      const scaledW = imgW * scale;
-      const scaledH = imgH * scale;
-      const offsetXPx = (cellWidthPx - scaledW) / 2;
-      const offsetYPx = (cellHeightPx - scaledH) / 2;
-      const insetCol = offsetXPx / cellWidthPx;
-      const insetRow = offsetYPx / cellHeightPx;
-      const spanCol = scaledW / cellWidthPx;
-      const spanRow = scaledH / cellHeightPx;
       worksheet.addImage(imageId, {
-        tl: { col: photoColIndex - 1 + insetCol, row: row.number - 1 + insetRow },
-        br: { col: photoColIndex - 1 + insetCol + spanCol, row: row.number - 1 + insetRow + spanRow },
+        tl: { col: photoColIndex - 1, row: row.number - 1 },
+        br: { col: photoColIndex, row: row.number },
         editAs: 'twoCell'
       });
     }
@@ -210,15 +173,6 @@ function getImageExtension(mime) {
   if (mime.includes('webp')) return 'webp';
   if (mime.includes('heic') || mime.includes('heif')) return 'jpeg';
   return 'jpeg';
-}
-
-function getImageSize(dataUrl) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => resolve({ width: img.width || 1, height: img.height || 1 });
-    img.onerror = () => resolve({ width: 1, height: 1 });
-    img.src = dataUrl;
-  });
 }
 
 function stripDataUrlPrefix(dataUrl) {
