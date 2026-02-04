@@ -9,6 +9,9 @@
     saveSettings,
     clearEntries,
     clearSettings,
+    loadLogo,
+    saveLogo,
+    clearLogo,
     deleteEntry,
     addTemplate,
     listTemplates,
@@ -23,7 +26,8 @@
     deleteExport
   } from '$lib/db';
   import { compressImage, blobToObjectUrl } from '$lib/image';
-  import { exportToXlsx, exportToXlsxData } from '$lib/export';
+  import { exportToXlsxData } from '$lib/export';
+  import { exportToPdfData } from '$lib/pdf';
 
   const generateId = () => `col_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const withColumnIds = (cols) => cols.map((col) => ({ id: col.id ?? generateId(), ...col }));
@@ -37,9 +41,12 @@
 
   let view = 'landing';
 
+  let protocolTitle = '';
   let projectName = '';
   let protocolDate = today();
   let protocolDescription = '';
+  let attendees = '';
+  let logoDataUrl = '';
   let columns = defaultColumns.map((col) => ({ ...col }));
 
   let newColName = '';
@@ -67,6 +74,8 @@
   let formatReturnView = 'start';
   let formatBackup = null;
   let showFormatInfo = false;
+  let formatError = '';
+  let formatNameTouched = false;
   let editingColIndex = null;
   let editColName = '';
   let editColType = 'text';
@@ -109,8 +118,18 @@
     message: '',
     primaryLabel: '',
     secondaryLabel: '',
+    tertiaryLabel: '',
+    showCancel: true,
+    secondaryDanger: false,
     onPrimary: null,
-    onSecondary: null
+    onSecondary: null,
+    onTertiary: null
+  };
+  let downloadDialog = {
+    open: false,
+    title: '',
+    onExcel: null,
+    onPdf: null
   };
   let lastView = view;
   let suppressHistory = false;
@@ -118,12 +137,13 @@
   onMount(async () => {
     const saved = await loadSettings();
     if (saved) {
-      protocolDescription = saved.protocolDescription ?? protocolDescription;
       columns = withColumnIds(saved.columns ?? columns);
       selectedTemplateId = saved.selectedTemplateId ?? selectedTemplateId;
     }
+    protocolTitle = '';
     projectName = '';
     protocolDate = today();
+    logoDataUrl = (await loadLogo()) || '';
 
     const storedEntries = await listEntries();
     entries = storedEntries.map((e) => ({
@@ -182,7 +202,10 @@
   }
 
   const persistSettings = async () => {
-    await saveSettings({ projectName, protocolDate, protocolDescription, columns, selectedTemplateId });
+    await saveSettings({
+      columns,
+      selectedTemplateId
+    });
   };
 
   const addColumn = () => {
@@ -212,7 +235,12 @@
   };
 
   const saveTemplate = async () => {
-    if (!templateName.trim()) return;
+    if (!templateName.trim()) {
+      formatError = 'Bitte gib einen Formatnamen ein.';
+      formatNameTouched = true;
+      return;
+    }
+    formatError = '';
     const record = {
       id: `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       createdAt: new Date().toISOString(),
@@ -223,6 +251,8 @@
     templates = [record, ...templates];
     selectedTemplateId = record.id;
     templateName = '';
+    formatError = '';
+    formatNameTouched = false;
     persistSettings();
     isCreatingFormat = false;
     isEditingFormat = false;
@@ -286,6 +316,8 @@
     isCreatingFormat = false;
     isEditingFormat = false;
     formatBackup = null;
+    formatError = '';
+    formatNameTouched = false;
     view = formatReturnView;
   };
 
@@ -425,6 +457,10 @@
     }
     activeProtocolId = null;
     activeProtocolCreatedAt = null;
+    protocolTitle = '';
+    projectName = '';
+    protocolDescription = '';
+    attendees = '';
     await clearEntries();
     entries = [];
     await persistSettings();
@@ -438,14 +474,33 @@
     view = 'main';
   };
 
+  const handleLogoUpload = async (event) => {
+    const file = event.target?.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      logoDataUrl = reader.result;
+      await saveLogo(logoDataUrl);
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  };
+
+  const removeLogo = async () => {
+    logoDataUrl = '';
+    await clearLogo();
+  };
+
   const openProtocol = async (id) => {
     const protocol = await getProtocol(id);
     if (!protocol) return;
     activeProtocolId = protocol.id;
     activeProtocolCreatedAt = protocol.createdAt;
+    protocolTitle = protocol.protocolTitle || '';
     projectName = protocol.projectName || '';
     protocolDate = protocol.protocolDate || today();
     protocolDescription = protocol.protocolDescription || '';
+    attendees = protocol.attendees || '';
     columns = protocol.columns?.length ? withColumnIds(protocol.columns) : defaultColumns.map((col) => ({ ...col }));
     entries = (protocol.entries || []).map((e) => ({
       ...e,
@@ -602,9 +657,11 @@
       id: activeProtocolId || `protocol_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       createdAt: activeProtocolCreatedAt || now,
       updatedAt: now,
+      protocolTitle: protocolTitle || '',
       projectName: projectName || '',
       protocolDate: protocolDate || today(),
       protocolDescription: protocolDescription || '',
+      attendees: attendees || '',
       columns: columns.map((c) => ({ ...c })),
       entries: entries.map((e) => ({
         id: e.id,
@@ -620,23 +677,42 @@
     await addProtocol(protocolRecord);
     isDirty = false;
 
-    const result = await exportToXlsxData({
-      projectName: protocolRecord.projectName,
-      protocolDate: protocolRecord.protocolDate,
-      protocolDescription: protocolRecord.protocolDescription,
-      columns: protocolRecord.columns,
-      entries: protocolRecord.entries
-    });
+    const [xlsxResult, pdfResult] = await Promise.all([
+      exportToXlsxData({
+        protocolTitle: protocolRecord.protocolTitle,
+        projectName: protocolRecord.projectName,
+        protocolDate: protocolRecord.protocolDate,
+        protocolDescription: protocolRecord.protocolDescription,
+        attendees: protocolRecord.attendees,
+        logoDataUrl,
+        columns: protocolRecord.columns,
+        entries: protocolRecord.entries
+      }),
+      exportToPdfData({
+        protocolTitle: protocolRecord.protocolTitle,
+        projectName: protocolRecord.projectName,
+        protocolDate: protocolRecord.protocolDate,
+        protocolDescription: protocolRecord.protocolDescription,
+        attendees: protocolRecord.attendees,
+        logoDataUrl,
+        columns: protocolRecord.columns,
+        entries: protocolRecord.entries
+      })
+    ]);
 
+    const now = new Date().toISOString();
     let exportRecord = null;
-    if (result) {
+    if (xlsxResult || pdfResult) {
       exportRecord = await upsertExportByProtocol({
         id: `export_${protocolRecord.id}`,
         protocolId: protocolRecord.id,
         createdAt: protocolRecord.createdAt,
-        updatedAt: new Date().toISOString(),
-        filename: result.filename,
-        base64: result.base64,
+        updatedAt: now,
+        filename: xlsxResult?.filename || '',
+        base64: xlsxResult?.base64 || '',
+        pdfFilename: pdfResult?.filename || '',
+        pdfBase64: pdfResult?.base64 || '',
+        pdfUpdatedAt: now,
         projectName: protocolRecord.projectName,
         protocolDate: protocolRecord.protocolDate
       });
@@ -659,9 +735,12 @@
     confirmDialog = {
       open: true,
       title: 'Vorgang abschließen',
-      message: 'Excel jetzt direkt herunterladen?',
-      primaryLabel: 'Ja, downloaden',
-      secondaryLabel: 'Nein',
+      message: 'Wie möchtest du den Export herunterladen?',
+      primaryLabel: 'Excel herunterladen',
+      secondaryLabel: 'PDF herunterladen',
+      tertiaryLabel: 'Nur speichern',
+      showCancel: true,
+      secondaryDanger: false,
       onPrimary: async () => {
         if (isExporting) return;
         isExporting = true;
@@ -669,7 +748,7 @@
           const { exportRecord } = await saveAndExportProtocol();
           protocolsList = await listProtocols();
           exportsList = await listExports();
-          if (exportRecord) await downloadExport(exportRecord);
+          if (exportRecord) await downloadExportExcel(exportRecord);
           showToast('Gespeichert');
           await resetProtocol();
           view = 'protocols';
@@ -682,6 +761,25 @@
         }
       },
       onSecondary: async () => {
+        if (isExporting) return;
+        isExporting = true;
+        try {
+          const { exportRecord } = await saveAndExportProtocol();
+          protocolsList = await listProtocols();
+          exportsList = await listExports();
+          if (exportRecord) await downloadExportPdf(exportRecord);
+          showToast('Gespeichert');
+          await resetProtocol();
+          view = 'protocols';
+          closeConfirm();
+        } catch (err) {
+          closeError = 'Abschluss fehlgeschlagen. Bitte erneut versuchen.';
+          console.error(err);
+        } finally {
+          isExporting = false;
+        }
+      },
+      onTertiary: async () => {
         if (isExporting) return;
         isExporting = true;
         try {
@@ -706,9 +804,11 @@
     await clearEntries();
     await clearSettings();
     entries = [];
+    protocolTitle = '';
     projectName = '';
     protocolDate = today();
     protocolDescription = '';
+    attendees = '';
     columns = defaultColumns.map((col) => ({ ...col }));
     activeProtocolId = null;
     activeProtocolCreatedAt = null;
@@ -727,24 +827,46 @@
       message: 'Möchtest du die aktuellen Daten speichern oder verwerfen?',
       primaryLabel: 'Speichern',
       secondaryLabel: 'Verwerfen',
+      tertiaryLabel: '',
+      showCancel: true,
+      secondaryDanger: true,
       onPrimary: async () => {
         const protocolRecord = buildProtocolRecord();
         await addProtocol(protocolRecord);
-        const result = await exportToXlsxData({
-          projectName: protocolRecord.projectName,
-          protocolDate: protocolRecord.protocolDate,
-          protocolDescription: protocolRecord.protocolDescription,
-          columns: protocolRecord.columns,
-          entries: protocolRecord.entries
-        });
-        if (result) {
+        const [xlsxResult, pdfResult] = await Promise.all([
+          exportToXlsxData({
+            protocolTitle: protocolRecord.protocolTitle,
+            projectName: protocolRecord.projectName,
+            protocolDate: protocolRecord.protocolDate,
+            protocolDescription: protocolRecord.protocolDescription,
+            attendees: protocolRecord.attendees,
+            logoDataUrl,
+            columns: protocolRecord.columns,
+            entries: protocolRecord.entries
+          }),
+          exportToPdfData({
+            protocolTitle: protocolRecord.protocolTitle,
+            projectName: protocolRecord.projectName,
+            protocolDate: protocolRecord.protocolDate,
+            protocolDescription: protocolRecord.protocolDescription,
+            attendees: protocolRecord.attendees,
+            logoDataUrl,
+            columns: protocolRecord.columns,
+            entries: protocolRecord.entries
+          })
+        ]);
+        const now = new Date().toISOString();
+        if (xlsxResult || pdfResult) {
           await upsertExportByProtocol({
             id: `export_${protocolRecord.id}`,
             protocolId: protocolRecord.id,
             createdAt: protocolRecord.createdAt,
-            updatedAt: new Date().toISOString(),
-            filename: result.filename,
-            base64: result.base64,
+            updatedAt: now,
+            filename: xlsxResult?.filename || '',
+            base64: xlsxResult?.base64 || '',
+            pdfFilename: pdfResult?.filename || '',
+            pdfBase64: pdfResult?.base64 || '',
+            pdfUpdatedAt: now,
             projectName: protocolRecord.projectName,
             protocolDate: protocolRecord.protocolDate
           });
@@ -778,8 +900,12 @@
       message: '',
       primaryLabel: '',
       secondaryLabel: '',
+      tertiaryLabel: '',
+      showCancel: true,
+      secondaryDanger: false,
       onPrimary: null,
-      onSecondary: null
+      onSecondary: null,
+      onTertiary: null
     };
   };
 
@@ -801,19 +927,26 @@
     view = 'landing';
   };
 
-  const downloadExport = async (exp) => {
-    if (!exp?.base64) {
+  const openDownloadDialog = ({ title, onExcel, onPdf }) => {
+    downloadDialog = { open: true, title, onExcel, onPdf };
+  };
+
+  const closeDownloadDialog = () => {
+    downloadDialog = { open: false, title: '', onExcel: null, onPdf: null };
+  };
+
+  const downloadFileFromBase64 = async ({ base64, filename, mimeType }) => {
+    if (!base64) {
       downloadError = 'Download nicht verfügbar.';
       return;
     }
     downloadError = '';
-    const byteString = atob(exp.base64);
+    const byteString = atob(base64);
     const bytes = new Uint8Array(byteString.length);
     for (let i = 0; i < byteString.length; i += 1) {
       bytes[i] = byteString.charCodeAt(i);
     }
-    const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const filename = buildFilename(exp.projectName, exp.protocolDate);
+    const blob = new Blob([bytes], { type: mimeType });
 
     let shared = false;
     if (navigator?.share) {
@@ -850,13 +983,74 @@
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   };
 
+  const downloadExportExcel = async (exp) => {
+    const filename = exp.filename || buildFilename(exp.projectName, exp.protocolDate);
+    await downloadFileFromBase64({
+      base64: exp.base64,
+      filename,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+  };
+
+  const ensurePdfExport = async (protocol, existing) => {
+    if (!protocol) return null;
+    const pdfResult = await exportToPdfData({
+      protocolTitle: protocol.protocolTitle,
+      projectName: protocol.projectName,
+      protocolDate: protocol.protocolDate,
+      protocolDescription: protocol.protocolDescription,
+      attendees: protocol.attendees,
+      logoDataUrl,
+      columns: protocol.columns,
+      entries: protocol.entries
+    });
+    if (!pdfResult) return null;
+    const now = new Date().toISOString();
+    return upsertExportByProtocol({
+      id: `export_${protocol.id}`,
+      protocolId: protocol.id,
+      createdAt: protocol.createdAt,
+      updatedAt: now,
+      filename: existing?.filename || buildFilename(protocol.projectName, protocol.protocolDate),
+      base64: existing?.base64 || '',
+      pdfFilename: pdfResult.filename,
+      pdfBase64: pdfResult.base64,
+      pdfUpdatedAt: now,
+      projectName: protocol.projectName,
+      protocolDate: protocol.protocolDate
+    });
+  };
+
+  const downloadExportPdf = async (exp, protocol) => {
+    let target = exp;
+    if (!target?.pdfBase64) {
+      const protocolRecord = protocol || (exp?.protocolId ? await getProtocol(exp.protocolId) : null);
+      if (!protocolRecord) {
+        downloadError = 'Download nicht verfügbar.';
+        return;
+      }
+      target = await ensurePdfExport(protocolRecord, exp);
+      exportsList = await listExports();
+    }
+    if (!target?.pdfBase64) {
+      downloadError = 'Download nicht verfügbar.';
+      return;
+    }
+    const filename =
+      target.pdfFilename || buildFilename(target.projectName, target.protocolDate).replace(/\.xlsx$/i, '.pdf');
+    await downloadFileFromBase64({ base64: target.pdfBase64, filename, mimeType: 'application/pdf' });
+  };
+
   const downloadProtocolExport = async (protocol) => {
     let exp = exportsList.find((e) => e.protocolId === protocol.id);
     if (!exp) {
-      const result = await exportToXlsx({
+      const result = await exportToXlsxData({
+        protocolTitle: protocol.protocolTitle,
         projectName: protocol.projectName,
         protocolDate: protocol.protocolDate,
         protocolDescription: protocol.protocolDescription,
+        attendees: protocol.attendees,
+        logoDataUrl,
         columns: protocol.columns,
         entries: protocol.entries
       });
@@ -875,7 +1069,43 @@
       }
     }
     if (exp) {
-      await downloadExport(exp);
+      await downloadExportExcel(exp);
+    }
+  };
+
+  const downloadProtocolPdf = async (protocol) => {
+    let exp = exportsList.find((e) => e.protocolId === protocol.id);
+    if (!exp?.pdfBase64) {
+      const pdfResult = await exportToPdfData({
+        protocolTitle: protocol.protocolTitle,
+        projectName: protocol.projectName,
+        protocolDate: protocol.protocolDate,
+        protocolDescription: protocol.protocolDescription,
+        attendees: protocol.attendees,
+        logoDataUrl,
+        columns: protocol.columns,
+        entries: protocol.entries
+      });
+      if (pdfResult) {
+        const now = new Date().toISOString();
+        exp = await upsertExportByProtocol({
+          id: `export_${protocol.id}`,
+          protocolId: protocol.id,
+          createdAt: protocol.createdAt,
+          updatedAt: now,
+          filename: exp?.filename || buildFilename(protocol.projectName, protocol.protocolDate),
+          base64: exp?.base64 || '',
+          pdfFilename: pdfResult.filename,
+          pdfBase64: pdfResult.base64,
+          pdfUpdatedAt: now,
+          projectName: protocol.projectName,
+          protocolDate: protocol.protocolDate
+        });
+        exportsList = await listExports();
+      }
+    }
+    if (exp?.pdfBase64) {
+      await downloadExportPdf(exp, protocol);
     }
   };
 
@@ -927,9 +1157,21 @@
       downloadError = 'Keine Auswahl getroffen.';
       return;
     }
-    for (const protocol of protocolsList.filter((p) => selectedProtocols.has(p.id))) {
-      await downloadProtocolExport(protocol);
-    }
+    openDownloadDialog({
+      title: 'Auswahl herunterladen',
+      onExcel: async () => {
+        for (const protocol of protocolsList.filter((p) => selectedProtocols.has(p.id))) {
+          await downloadProtocolExport(protocol);
+        }
+        closeDownloadDialog();
+      },
+      onPdf: async () => {
+        for (const protocol of protocolsList.filter((p) => selectedProtocols.has(p.id))) {
+          await downloadProtocolPdf(protocol);
+        }
+        closeDownloadDialog();
+      }
+    });
   };
 
   const downloadSelectedExports = async () => {
@@ -937,9 +1179,21 @@
       downloadError = 'Keine Auswahl getroffen.';
       return;
     }
-    for (const exp of exportsList.filter((e) => selectedExports.has(e.id))) {
-      await downloadExport(exp);
-    }
+    openDownloadDialog({
+      title: 'Auswahl herunterladen',
+      onExcel: async () => {
+        for (const exp of exportsList.filter((e) => selectedExports.has(e.id))) {
+          await downloadExportExcel(exp);
+        }
+        closeDownloadDialog();
+      },
+      onPdf: async () => {
+        for (const exp of exportsList.filter((e) => selectedExports.has(e.id))) {
+          await downloadExportPdf(exp);
+        }
+        closeDownloadDialog();
+      }
+    });
   };
 
   const deleteSelectedProtocols = async () => {
@@ -1053,6 +1307,14 @@
       <div class="section">
         <h3>Stammdaten</h3>
         <label class="field">
+          <span>Protokoll-Name</span>
+          <input
+            bind:value={protocolTitle}
+            placeholder="z. B. Tagesprotokoll Baustelle"
+            on:input={() => (isDirty = true)}
+          />
+        </label>
+        <label class="field">
           <span>Projektname</span>
           <input bind:value={projectName} placeholder="Trag den Projektnamen ein" on:input={() => (isDirty = true)} />
         </label>
@@ -1068,9 +1330,39 @@
         </label>
 
         <label class="field">
+          <span>Anwesende Personen</span>
+          <input
+            type="text"
+            placeholder="z. B. Max Mustermann, Bauleitung"
+            bind:value={attendees}
+            on:input={() => (isDirty = true)}
+          />
+        </label>
+
+        <label class="field">
           <span>Datum</span>
           <div class="readonly-field">{protocolDate}</div>
         </label>
+
+        <div class="field">
+          <span>Firmenlogo (optional)</span>
+          {#if logoDataUrl}
+            <img class="logo-preview" src={logoDataUrl} alt="Firmenlogo" />
+            <div class="logo-actions">
+              <label class="file-button">
+                Logo ändern
+                <input type="file" accept="image/*" on:change={handleLogoUpload} />
+              </label>
+              <button type="button" class="ghost" on:click={removeLogo}>Logo entfernen</button>
+            </div>
+          {:else}
+            <label class="file-button">
+              Logo hochladen
+              <input type="file" accept="image/*" on:change={handleLogoUpload} />
+            </label>
+          {/if}
+          <span class="muted">Das Logo bleibt gespeichert, bis du es änderst oder entfernst.</span>
+        </div>
       </div>
 
       <div class="section">
@@ -1173,8 +1465,19 @@
       {#if formatMode === 'new'}
         <label class="field">
           <span>Formatname</span>
-          <input bind:value={templateName} placeholder="z. B. Standard Baustelle" />
+          <input
+            class:field-error={formatNameTouched && !templateName.trim()}
+            bind:value={templateName}
+            placeholder="z. B. Standard Baustelle"
+            on:input={() => {
+              formatNameTouched = true;
+              if (templateName.trim()) formatError = '';
+            }}
+          />
         </label>
+        {#if formatError}
+          <p class="error">{formatError}</p>
+        {/if}
       {/if}
 
       <div class="section">
@@ -1240,7 +1543,9 @@
         {#if formatMode === 'edit'}
           <button class="primary" type="button" on:click={saveEditedFormat}>Änderungen speichern</button>
         {:else}
-          <button class="primary" type="button" on:click={saveTemplate}>Format speichern</button>
+          <button class="primary" type="button" on:click={saveTemplate}>
+            Format speichern
+          </button>
         {/if}
         <button type="button" on:click={cancelFormatEdit}>Abbrechen</button>
       </div>
@@ -1249,8 +1554,12 @@
 
   {#if view === 'main'}
     <section class="panel">
-      <h2>{projectName || 'Protokoll'}</h2>
+      <h2>{protocolTitle || projectName || 'Protokoll'}</h2>
       <div class="summary">
+        <div>
+          <div class="label">Protokoll-Name</div>
+          <div>{protocolTitle || '—'}</div>
+        </div>
         <div>
           <div class="label">Datum</div>
           <div>{protocolDate}</div>
@@ -1258,6 +1567,10 @@
         <div>
           <div class="label">Beschreibung</div>
           <div>{protocolDescription || '—'}</div>
+        </div>
+        <div>
+          <div class="label">Anwesende Personen</div>
+          <div>{attendees || '—'}</div>
         </div>
         <div>
           <div class="label">Einträge</div>
@@ -1307,8 +1620,12 @@
 
   {#if view === 'protocol-view'}
     <section class="panel">
-      <h2>{projectName || 'Protokoll'}</h2>
+      <h2>{protocolTitle || projectName || 'Protokoll'}</h2>
       <div class="summary">
+        <div>
+          <div class="label">Protokoll-Name</div>
+          <div>{protocolTitle || '—'}</div>
+        </div>
         <div>
           <div class="label">Datum</div>
           <div>{protocolDate}</div>
@@ -1318,6 +1635,10 @@
           <div>{protocolDescription || '—'}</div>
         </div>
         <div>
+          <div class="label">Anwesende Personen</div>
+          <div>{attendees || '—'}</div>
+        </div>
+        <div>
           <div class="label">Einträge</div>
           <div>{entries.length}</div>
         </div>
@@ -1325,7 +1646,23 @@
 
       <div class="cta-row">
         <button class="primary" type="button" on:click={() => (view = 'main')}>Bearbeiten</button>
-        <button type="button" on:click={() => downloadProtocolExport(buildProtocolRecord())}>Download</button>
+        <button
+          type="button"
+          on:click={() =>
+            openDownloadDialog({
+              title: 'Download',
+              onExcel: async () => {
+                await downloadProtocolExport(buildProtocolRecord());
+                closeDownloadDialog();
+              },
+              onPdf: async () => {
+                await downloadProtocolPdf(buildProtocolRecord());
+                closeDownloadDialog();
+              }
+            })}
+        >
+          Download
+        </button>
         <button type="button" on:click={goToProtocols}>Zurück</button>
       </div>
 
@@ -1474,24 +1811,39 @@
       {:else}
         <div class="exports">
           {#each exportsList as exp}
-            <div class="export-card">
+            <div
+              class:clickable={!selectionModeExports}
+              class="export-card"
+              on:click={() => {
+                if (selectionModeExports) return;
+                openDownloadDialog({
+                  title: 'Download',
+                  onExcel: async () => {
+                    await downloadExportExcel(exp);
+                    closeDownloadDialog();
+                  },
+                  onPdf: async () => {
+                    await downloadExportPdf(exp);
+                    closeDownloadDialog();
+                  }
+                });
+              }}
+            >
               {#if selectionModeExports}
                 <label class="export-select">
                   <input
                     type="checkbox"
                     checked={selectedExports.has(exp.id)}
                     on:change={() => toggleExportsSelection(exp.id)}
+                    on:click|stopPropagation
                   />
                 </label>
               {/if}
               <div class="export-info">
-                <div class="export-name">{exp.filename}</div>
+                <div class="export-name">{exp.projectName || 'Ohne Namen'}</div>
                 <div class="export-meta">
                   {new Date(exp.updatedAt || exp.createdAt).toLocaleString()} · {exp.projectName} · {exp.protocolDate}
                 </div>
-              </div>
-              <div class="export-actions">
-                <button type="button" on:click={() => downloadExport(exp)}>Download</button>
               </div>
             </div>
           {/each}
@@ -1528,10 +1880,33 @@
         <button class="primary" type="button" on:click={confirmDialog.onPrimary}>
           {confirmDialog.primaryLabel || 'OK'}
         </button>
-        <button class="danger" type="button" on:click={confirmDialog.onSecondary}>
+        <button
+          class:danger={confirmDialog.secondaryDanger}
+          class:primary={!confirmDialog.secondaryDanger}
+          type="button"
+          on:click={confirmDialog.onSecondary}
+        >
           {confirmDialog.secondaryLabel}
         </button>
-        <button type="button" on:click={closeConfirm}>Abbrechen</button>
+        {#if confirmDialog.tertiaryLabel}
+          <button type="button" on:click={confirmDialog.onTertiary}>{confirmDialog.tertiaryLabel}</button>
+        {/if}
+        {#if confirmDialog.showCancel}
+          <button type="button" on:click={closeConfirm}>Abbrechen</button>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
+  {#if downloadDialog.open}
+    <div class="modal-backdrop" on:click={closeDownloadDialog}></div>
+    <div class="modal">
+      <h3>{downloadDialog.title}</h3>
+      <p class="muted">Welches Format möchtest du herunterladen?</p>
+      <div class="cta-row">
+        <button class="primary" type="button" on:click={downloadDialog.onExcel}>Excel herunterladen</button>
+        <button class="primary" type="button" on:click={downloadDialog.onPdf}>PDF herunterladen</button>
+        <button type="button" on:click={closeDownloadDialog}>Abbrechen</button>
       </div>
     </div>
   {/if}
@@ -2000,6 +2375,16 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .export-card.clickable {
+    cursor: pointer;
+  }
+
+  .export-card.clickable:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 24px rgba(23, 21, 18, 0.12);
   }
 
   .export-name {
@@ -2025,6 +2410,42 @@
     gap: 8px;
   }
 
+  .logo-preview {
+    max-width: 200px;
+    max-height: 80px;
+    object-fit: contain;
+    display: block;
+    margin: 8px 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 6px;
+    background: #fff;
+  }
+
+  .logo-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .file-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    border: 1px dashed var(--border);
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .file-button input {
+    display: none;
+  }
+
   .danger {
     border-color: #ef4444;
     color: #b91c1c;
@@ -2039,6 +2460,11 @@
     color: #b91c1c;
     font-weight: 600;
     margin-top: 8px;
+  }
+
+  .field-error {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
   }
 
   .modal-backdrop {

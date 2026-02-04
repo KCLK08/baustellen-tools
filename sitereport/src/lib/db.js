@@ -41,6 +41,19 @@ export async function clearSettings() {
   await db.settings.delete('current');
 }
 
+export async function loadLogo() {
+  const row = await db.settings.get('logo');
+  return row?.value ?? '';
+}
+
+export async function saveLogo(value) {
+  await db.settings.put({ id: 'logo', value });
+}
+
+export async function clearLogo() {
+  await db.settings.delete('logo');
+}
+
 export async function listEntries() {
   return db.entries.orderBy('createdAt').reverse().toArray();
 }

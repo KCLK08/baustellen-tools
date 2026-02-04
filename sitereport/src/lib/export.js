@@ -2,8 +2,26 @@ import ExcelJS from 'exceljs';
 import { blobToDataUrl } from './image';
 import { bufferToBase64, getXlsxMime, isNativePlatform, saveXlsxToFiles } from './native';
 
-export async function exportToXlsx({ projectName, protocolDate, protocolDescription, columns, entries }) {
-  const workbook = await buildWorkbook({ projectName, protocolDate, protocolDescription, columns, entries });
+export async function exportToXlsx({
+  protocolTitle,
+  projectName,
+  protocolDate,
+  protocolDescription,
+  attendees,
+  logoDataUrl,
+  columns,
+  entries
+}) {
+  const workbook = await buildWorkbook({
+    protocolTitle,
+    projectName,
+    protocolDate,
+    protocolDescription,
+    attendees,
+    logoDataUrl,
+    columns,
+    entries
+  });
   const buffer = await workbook.xlsx.writeBuffer();
   const filename = buildFilename(projectName, protocolDate);
   const base64 = bufferToBase64(buffer);
@@ -25,8 +43,26 @@ export async function exportToXlsx({ projectName, protocolDate, protocolDescript
   return { filename, base64 };
 }
 
-export async function exportToXlsxData({ projectName, protocolDate, protocolDescription, columns, entries }) {
-  const workbook = await buildWorkbook({ projectName, protocolDate, protocolDescription, columns, entries });
+export async function exportToXlsxData({
+  protocolTitle,
+  projectName,
+  protocolDate,
+  protocolDescription,
+  attendees,
+  logoDataUrl,
+  columns,
+  entries
+}) {
+  const workbook = await buildWorkbook({
+    protocolTitle,
+    projectName,
+    protocolDate,
+    protocolDescription,
+    attendees,
+    logoDataUrl,
+    columns,
+    entries
+  });
   const buffer = await workbook.xlsx.writeBuffer();
   const filename = buildFilename(projectName, protocolDate);
   const base64 = bufferToBase64(buffer);
@@ -37,11 +73,22 @@ export async function exportToXlsxShare({
   projectName,
   protocolDate,
   protocolDescription,
+  attendees,
+  logoDataUrl,
   columns,
   entries,
   shareFn
 }) {
-  const workbook = await buildWorkbook({ projectName, protocolDate, protocolDescription, columns, entries });
+  const workbook = await buildWorkbook({
+    protocolTitle,
+    projectName,
+    protocolDate,
+    protocolDescription,
+    attendees,
+    logoDataUrl,
+    columns,
+    entries
+  });
   const buffer = await workbook.xlsx.writeBuffer();
   const filename = buildFilename(projectName, protocolDate);
   const base64 = bufferToBase64(buffer);
@@ -50,7 +97,16 @@ export async function exportToXlsxShare({
   return { filename, base64 };
 }
 
-async function buildWorkbook({ projectName, protocolDate, protocolDescription, columns, entries }) {
+async function buildWorkbook({
+  protocolTitle,
+  projectName,
+  protocolDate,
+  protocolDescription,
+  attendees,
+  logoDataUrl,
+  columns,
+  entries
+}) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'SiteReport';
   workbook.created = new Date();
@@ -66,21 +122,27 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
   const rowPx = (rowHeightPts) => rowHeightPts * (96 / 72);
   const colWidthFromPx = (px) => Math.max(1, Math.round((px - 5) / 7));
   const rowHeightFromPx = (px) => Math.max(1, Math.round(px / (96 / 72)));
-  const imageMarginPx = 0;
 
-  worksheet.addRow([`Projekt: ${projectName || ''}`]);
-  worksheet.addRow([`Datum: ${protocolDate || ''}`]);
-  worksheet.addRow([`Beschreibung: ${protocolDescription || ''}`]);
+  const headerLines = [
+    { label: 'Protokoll-Name', value: protocolTitle || '' },
+    { label: 'Projekt', value: projectName || '' },
+    { label: 'Datum', value: protocolDate || '' },
+    { label: 'Beschreibung', value: protocolDescription || '' },
+    { label: 'Anwesende Personen', value: attendees || '' }
+  ];
+  worksheet.addRow([headerLines[0]]);
+  worksheet.addRow([headerLines[1]]);
+  worksheet.addRow([headerLines[2]]);
+  worksheet.addRow([headerLines[3]]);
+  worksheet.addRow([headerLines[4]]);
   worksheet.addRow([]);
 
   // Merge metadata rows across full table width
   if (totalCols > 1) {
-    worksheet.mergeCells(1, 1, 1, totalCols);
-    worksheet.mergeCells(2, 1, 2, totalCols);
-    worksheet.mergeCells(3, 1, 3, totalCols);
+    worksheet.mergeCells(1, 1, 5, totalCols);
   }
 
-  const headerStartRow = 5;
+  const headerStartRow = 7;
   const photoColumn = columns.find((c) => c.isPhoto);
   const photoColIndex = photoColumn ? columns.indexOf(photoColumn) + 2 : null;
   const photoCache = new Map();
@@ -94,14 +156,17 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
     maxImgW = Math.max(maxImgW, width || 0);
     maxImgH = Math.max(maxImgH, height || 0);
   }
-  const desiredCellWidthPx = Math.min(
-    maxCellWidthPx,
-    maxImgW ? Math.max(maxImgW + imageMarginPx * 2, minCellWidthPx) : minCellWidthPx
+  const scaleDown = Math.min(
+    maxCellWidthPx / (maxImgW || maxCellWidthPx),
+    maxCellHeightPx / (maxImgH || maxCellHeightPx),
+    1
   );
-  const desiredCellHeightPx = Math.min(
-    maxCellHeightPx,
-    Math.max(minCellHeightPx, maxImgH || minCellHeightPx)
-  );
+  const scaledMaxImgW = maxImgW ? Math.round(maxImgW * scaleDown) : minCellWidthPx;
+  const scaledMaxImgH = maxImgH ? Math.round(maxImgH * scaleDown) : minCellHeightPx;
+
+  const desiredCellWidthPx = Math.max(scaledMaxImgW, minCellWidthPx);
+  const desiredCellHeightPx = Math.max(scaledMaxImgH, minCellHeightPx);
+
   const photoColWidth = colWidthFromPx(desiredCellWidthPx);
   const rowHeight = rowHeightFromPx(desiredCellHeightPx);
   const cellWidthPx = colPx(photoColWidth);
@@ -109,6 +174,34 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
   const headerRowValues = ['Nr.', ...columns.map((col) => col.name)];
 
   worksheet.spliceRows(headerStartRow, 0, headerRowValues);
+
+  const headerCell = worksheet.getCell(1, 1);
+  headerCell.value = {
+    richText: headerLines.flatMap((line, idx) => {
+      const isTitle = idx === 0 && line.label === 'Protokoll-Name';
+      const parts = [
+        ...(isTitle
+          ? [{ text: line.value || '—', font: { bold: true, size: 14 } }]
+          : [
+              { text: `${line.label}: `, font: { bold: true } },
+              { text: line.value || '—', font: { bold: false } }
+            ])
+      ];
+      if (idx < headerLines.length - 1) {
+        parts.push({ text: '\n', font: { bold: false } });
+      }
+      return parts;
+    })
+  };
+  headerCell.font = { name: 'Calibri', size: 11, color: { argb: 'FF111827' } };
+  headerCell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true };
+  headerCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+  headerCell.border = {
+    top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+    left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+    bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+    right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+  };
 
   const headerRow = worksheet.getRow(headerStartRow);
   for (let c = 1; c <= totalCols; c += 1) {
@@ -124,6 +217,50 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
     const columnIndex = idx + 2;
     worksheet.getColumn(columnIndex).width = col.isPhoto ? photoColWidth : 22;
   });
+
+  if (logoDataUrl) {
+    const { base64, extension } = extractImageData(logoDataUrl);
+    if (base64) {
+      const logoId = workbook.addImage({ base64, extension });
+      const { width: logoW, height: logoH } = await getImageSize(logoDataUrl);
+      const maxLogoW = 140;
+      const maxLogoH = 70;
+      const scale = Math.min(maxLogoW / logoW, maxLogoH / logoH, 1);
+      const drawW = logoW * scale;
+      const drawH = logoH * scale;
+      const logoMargin = 8;
+
+      const row1 = worksheet.getRow(1);
+      const textHeightPx = headerLines.length * 18 + 16;
+      row1.height = Math.max(
+        row1.height || 18,
+        rowHeightFromPx(Math.max(drawH + logoMargin * 2, textHeightPx))
+      );
+
+      const columnWidthsPx = [];
+      for (let i = 1; i <= totalCols; i += 1) {
+        const width = worksheet.getColumn(i).width || 10;
+        columnWidthsPx.push(colPx(width));
+      }
+      const totalWidthPx = columnWidthsPx.reduce((sum, w) => sum + w, 0);
+      const logoX = Math.max(0, totalWidthPx - drawW - logoMargin);
+      const { col: logoCol, offset: logoOffset } = pxToColOffset(logoX, columnWidthsPx);
+      const rowHeightPx = rowPx(row1.height || 18);
+      const logoY = Math.max(0, logoMargin);
+      const rowOffset = logoY / rowHeightPx;
+
+      worksheet.addImage(logoId, {
+        tl: { col: logoCol + logoOffset, row: 0 + rowOffset },
+        ext: { width: Math.max(1, drawW), height: Math.max(1, drawH) },
+        editAs: 'oneCell'
+      });
+    }
+  }
+  if (!logoDataUrl) {
+    const row1 = worksheet.getRow(1);
+    const textHeightPx = headerLines.length * 18 + 16;
+    row1.height = Math.max(row1.height || 18, rowHeightFromPx(textHeightPx));
+  }
 
 
   let rowNumber = 1;
@@ -163,8 +300,8 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
 
       const imgW = cached?.width || 1;
       const imgH = cached?.height || 1;
-      const maxW = Math.max(1, cellWidthPx - imageMarginPx * 2);
-      const maxH = Math.max(1, cellHeightPx - imageMarginPx * 2);
+      const maxW = Math.max(1, cellWidthPx);
+      const maxH = Math.max(1, cellHeightPx);
       let scale = Math.min(maxW / imgW, maxH / imgH);
       if (!Number.isFinite(scale) || scale <= 0) {
         scale = 1;
@@ -173,11 +310,22 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
       const scaledH = imgH * scale;
       const offsetXPx = (cellWidthPx - scaledW) / 2;
       const offsetYPx = (cellHeightPx - scaledH) / 2;
-      const insetCol = offsetXPx / cellWidthPx;
-      const insetRow = offsetYPx / cellHeightPx;
-
+      const colWidthUnits =
+        worksheet.getColumn(photoColIndex).isCustomWidth && worksheet.getColumn(photoColIndex).width
+          ? Math.floor(worksheet.getColumn(photoColIndex).width * 10000)
+          : 640000;
+      const rowHeightUnits = row.height ? Math.floor(row.height * 10000) : 180000;
+      const imageFracW = Math.min(1, scaledW / cellWidthPx);
+      const imageFracH = Math.min(1, scaledH / cellHeightPx);
+      const colOff = Math.round(((1 - imageFracW) / 2) * colWidthUnits);
+      const rowOff = Math.round(((1 - imageFracH) / 2) * rowHeightUnits);
       worksheet.addImage(imageId, {
-        tl: { col: photoColIndex - 1 + insetCol, row: row.number - 1 + insetRow },
+        tl: {
+          nativeCol: photoColIndex - 1,
+          nativeRow: row.number - 1,
+          nativeColOff: colOff,
+          nativeRowOff: rowOff
+        },
         ext: { width: Math.max(1, scaledW), height: Math.max(1, scaledH) },
         editAs: 'oneCell'
       });
@@ -215,6 +363,27 @@ function buildFilename(projectName, protocolDate) {
   const namePart = sanitizeFilename(projectName);
   const datePart = sanitizeFilename(protocolDate || new Date().toISOString().slice(0, 10));
   return `${namePart}_${datePart}.xlsx`;
+}
+
+function extractImageData(dataUrl) {
+  const match = String(dataUrl).match(/^data:image\/(png|jpe?g);base64,(.+)$/i);
+  if (!match) {
+    return { base64: '', extension: 'jpeg' };
+  }
+  const extension = match[1].toLowerCase() === 'png' ? 'png' : 'jpeg';
+  return { base64: match[2], extension };
+}
+
+function pxToColOffset(px, columnWidthsPx) {
+  let remaining = px;
+  for (let i = 0; i < columnWidthsPx.length; i += 1) {
+    const width = columnWidthsPx[i];
+    if (remaining <= width) {
+      return { col: i, offset: width ? remaining / width : 0 };
+    }
+    remaining -= width;
+  }
+  return { col: columnWidthsPx.length - 1, offset: 0 };
 }
 
 function getImageExtension(mime) {
