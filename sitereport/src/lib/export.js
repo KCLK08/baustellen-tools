@@ -96,7 +96,7 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
   }
   const desiredCellWidthPx = Math.min(
     maxCellWidthPx,
-    Math.max(minCellWidthPx, maxImgW || minCellWidthPx)
+    maxImgW ? Math.max(maxImgW + marginPx * 2, minCellWidthPx) : minCellWidthPx
   );
   const desiredCellHeightPx = Math.min(
     maxCellHeightPx,

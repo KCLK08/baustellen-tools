@@ -142,6 +142,7 @@
         const data = await res.json();
         if (data?.version && data.version !== appVersion) {
           updateAvailable = true;
+          console.log('[update] Neue Version verfügbar:', data.version);
         }
       } catch {
         // ignore network errors
