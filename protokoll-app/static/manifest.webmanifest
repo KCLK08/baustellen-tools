@@ -1,8 +1,8 @@
 {
-  "name": "Protokoll App",
-  "short_name": "Protokoll",
-  "start_url": "/baustellen-tools/protokoll-app/",
-  "scope": "/baustellen-tools/protokoll-app/",
+  "name": "SiteReport",
+  "short_name": "SiteReport",
+  "start_url": "/baustellen-tools/sitereport/",
+  "scope": "/baustellen-tools/sitereport/",
   "display": "standalone",
   "background_color": "#f6f3ee",
   "theme_color": "#0f172a",

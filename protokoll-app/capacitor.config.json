@@ -1,6 +1,6 @@
 {
-  "appId": "com.buew.protokollapp",
-  "appName": "Protokoll App",
+  "appId": "com.buew.sitereport",
+  "appName": "SiteReport",
   "webDir": "build",
   "bundledWebRuntime": false
 }

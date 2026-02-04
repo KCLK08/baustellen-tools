@@ -665,6 +665,7 @@
           protocolsList = await listProtocols();
           exportsList = await listExports();
           if (exportRecord) await downloadExport(exportRecord);
+          showToast('Gespeichert');
           await resetProtocol();
           view = 'protocols';
           closeConfirm();
@@ -682,6 +683,7 @@
           await saveAndExportProtocol();
           protocolsList = await listProtocols();
           exportsList = await listExports();
+          showToast('Gespeichert');
           await resetProtocol();
           view = 'protocols';
           closeConfirm();
@@ -747,7 +749,6 @@
         await resetProtocol();
         view = 'protocols';
         isDirty = false;
-        showToast('Gespeichert');
         closeConfirm();
       },
       onSecondary: async () => {
@@ -1011,7 +1012,7 @@
   <header class="hero">
     <div>
       <p class="eyebrow">Baustellen Tool</p>
-      <h1>Protokoll App</h1>
+      <h1>SiteReport</h1>
       <p class="sub">Schrittweise Dokumentation mit Foto und XLSX-Export.</p>
     </div>
     {#if view === 'start' || view === 'edit-setup'}

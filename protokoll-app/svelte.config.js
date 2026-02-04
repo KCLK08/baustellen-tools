@@ -9,7 +9,7 @@ export default {
     }),
     paths: {
       relative: true,
-      base: '/baustellen-tools/protokoll-app'
+      base: '/baustellen-tools/sitereport'
     }
   }
 };

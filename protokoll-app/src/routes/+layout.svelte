@@ -1,5 +1,5 @@
 <svelte:head>
-  <title>Protokoll App</title>
+  <title>SiteReport</title>
   <meta name="description" content="Offline Baustellen-Protokoll mit Foto und XLSX-Export" />
 </svelte:head>
 

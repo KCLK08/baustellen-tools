@@ -52,7 +52,7 @@ export async function exportToXlsxShare({
 
 async function buildWorkbook({ projectName, protocolDate, protocolDescription, columns, entries }) {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Protokoll App';
+  workbook.creator = 'SiteReport';
   workbook.created = new Date();
 
   const worksheet = workbook.addWorksheet('Protokoll');

@@ -1,4 +1,4 @@
-# Protokoll App (MVP Skeleton)
+# SiteReport
 
 Dieses Projekt ist ein PWA-Skeleton für die Baustellen-Dokumentation.
 
