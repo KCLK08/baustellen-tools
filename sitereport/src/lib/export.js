@@ -66,8 +66,6 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
   const rowPx = (rowHeightPts) => rowHeightPts * (96 / 72);
   const colWidthFromPx = (px) => Math.max(1, Math.round((px - 5) / 7));
   const rowHeightFromPx = (px) => Math.max(1, Math.round(px / (96 / 72)));
-  const cellWidthPx = photoColWidth * 7 + 5;
-  const cellHeightPx = rowHeight * (96 / 72);
   const imageMarginPx = 0;
 
   worksheet.addRow([`Projekt: ${projectName || ''}`]);
