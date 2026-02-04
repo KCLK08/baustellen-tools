@@ -58,8 +58,8 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
   const worksheet = workbook.addWorksheet('Protokoll');
 
   const totalCols = 1 + columns.length;
-  const photoColWidth = 34;
-  const rowHeight = 120;
+  const photoColWidth = 26;
+  const rowHeight = 90;
 
   worksheet.addRow([`Projekt: ${projectName || ''}`]);
   worksheet.addRow([`Datum: ${protocolDate || ''}`]);
@@ -126,8 +126,8 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
         extension
       });
 
-      const insetCol = 0;
-      const insetRow = 0;
+      const insetCol = 0.05;
+      const insetRow = 0.06;
       worksheet.addImage(imageId, {
         tl: { col: photoColIndex - 1 + insetCol, row: row.number - 1 + insetRow },
         br: { col: photoColIndex - insetCol, row: row.number - insetRow },
