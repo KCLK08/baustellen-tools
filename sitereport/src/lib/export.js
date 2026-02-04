@@ -60,6 +60,9 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
   const totalCols = 1 + columns.length;
   const photoColWidth = 26;
   const rowHeight = 90;
+  const cellWidthPx = photoColWidth * 7 + 5;
+  const cellHeightPx = rowHeight * (96 / 72);
+  const imageMarginPx = 2;
 
   worksheet.addRow([`Projekt: ${projectName || ''}`]);
   worksheet.addRow([`Datum: ${protocolDate || ''}`]);
@@ -126,11 +129,22 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
         extension
       });
 
-      const insetCol = 0.05;
-      const insetRow = 0.06;
+      const { width: imgW, height: imgH } = await getImageSize(dataUrl);
+      const maxW = Math.max(1, cellWidthPx - imageMarginPx * 2);
+      const maxH = Math.max(1, cellHeightPx - imageMarginPx * 2);
+      const scale = Math.min(maxW / imgW, maxH / imgH);
+      const scaledW = imgW * scale;
+      const scaledH = imgH * scale;
+      const offsetXPx = (cellWidthPx - scaledW) / 2;
+      const offsetYPx = (cellHeightPx - scaledH) / 2;
+      const insetCol = offsetXPx / cellWidthPx;
+      const insetRow = offsetYPx / cellHeightPx;
+      const spanCol = scaledW / cellWidthPx;
+      const spanRow = scaledH / cellHeightPx;
+
       worksheet.addImage(imageId, {
         tl: { col: photoColIndex - 1 + insetCol, row: row.number - 1 + insetRow },
-        br: { col: photoColIndex - insetCol, row: row.number - insetRow },
+        br: { col: photoColIndex - 1 + insetCol + spanCol, row: row.number - 1 + insetRow + spanRow },
         editAs: 'twoCell'
       });
     }
@@ -175,6 +189,15 @@ function getImageExtension(mime) {
   if (mime.includes('webp')) return 'webp';
   if (mime.includes('heic') || mime.includes('heif')) return 'jpeg';
   return 'jpeg';
+}
+
+function getImageSize(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.width || 1, height: img.height || 1 });
+    img.onerror = () => resolve({ width: 1, height: 1 });
+    img.src = dataUrl;
+  });
 }
 
 function stripDataUrlPrefix(dataUrl) {
