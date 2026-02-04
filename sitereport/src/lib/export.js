@@ -139,13 +139,11 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
       const offsetYPx = (cellHeightPx - scaledH) / 2;
       const insetCol = offsetXPx / cellWidthPx;
       const insetRow = offsetYPx / cellHeightPx;
-      const spanCol = scaledW / cellWidthPx;
-      const spanRow = scaledH / cellHeightPx;
 
       worksheet.addImage(imageId, {
         tl: { col: photoColIndex - 1 + insetCol, row: row.number - 1 + insetRow },
-        br: { col: photoColIndex - 1 + insetCol + spanCol, row: row.number - 1 + insetRow + spanRow },
-        editAs: 'twoCell'
+        ext: { width: Math.max(1, scaledW), height: Math.max(1, scaledH) },
+        editAs: 'oneCell'
       });
     }
     rowNumber += 1;
