@@ -90,7 +90,7 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
   worksheet.getColumn(1).width = 6;
   columns.forEach((col, idx) => {
     const columnIndex = idx + 2;
-    worksheet.getColumn(columnIndex).width = col.isPhoto ? 32 : 22;
+    worksheet.getColumn(columnIndex).width = col.isPhoto ? 36 : 22;
   });
 
 
@@ -105,7 +105,7 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
       }
     }
     const row = worksheet.addRow(rowValues);
-    row.height = 140;
+    row.height = 180;
     row.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
 
     columns.forEach((col, idx) => {
@@ -124,9 +124,11 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
         extension
       });
 
+      const insetCol = 0.06;
+      const insetRow = 0.08;
       worksheet.addImage(imageId, {
-        tl: { col: photoColIndex - 1, row: row.number - 1 },
-        br: { col: photoColIndex, row: row.number },
+        tl: { col: photoColIndex - 1 + insetCol, row: row.number - 1 + insetRow },
+        br: { col: photoColIndex - insetCol, row: row.number - insetRow },
         editAs: 'twoCell'
       });
     }
