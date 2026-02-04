@@ -161,7 +161,10 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
       const imgH = cached?.height || 1;
       const maxW = Math.max(1, cellWidthPx - imageMarginPx * 2);
       const maxH = Math.max(1, cellHeightPx - imageMarginPx * 2);
-      const scale = Math.min(maxW / imgW, maxH / imgH);
+      let scale = Math.min(maxW / imgW, maxH / imgH);
+      if (!Number.isFinite(scale) || scale <= 0) {
+        scale = 1;
+      }
       const scaledW = imgW * scale;
       const scaledH = imgH * scale;
       const offsetXPx = (cellWidthPx - scaledW) / 2;
