@@ -90,8 +90,9 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
     maxImgW = Math.max(maxImgW, width || 0);
     maxImgH = Math.max(maxImgH, height || 0);
   }
-  const cellWidthPx = Math.max(minCellWidthPx, maxImgW + marginPx * 2);
+  const maxAspect = maxImgH ? maxImgW / maxImgH : 1;
   const cellHeightPx = Math.max(minCellHeightPx, maxImgH + marginPx * 2);
+  const cellWidthPx = Math.max(minCellWidthPx, cellHeightPx * maxAspect);
   const photoColWidth = Math.ceil(cellWidthPx / pxPerCol);
   const rowHeight = Math.ceil(cellHeightPx / pxPerRow);
   const headerRowValues = ['Nr.', ...columns.map((col) => col.name)];
