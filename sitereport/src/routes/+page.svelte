@@ -76,6 +76,7 @@
   let showFormatInfo = false;
   let formatError = '';
   let formatNameTouched = false;
+  let protocolTitleTouched = false;
   let editingColIndex = null;
   let editColName = '';
   let editColType = 'text';
@@ -455,6 +456,12 @@
       saveError = 'Bitte zuerst ein Tabellenformat auswählen.';
       return;
     }
+    if (!protocolTitle.trim()) {
+      saveError = 'Bitte einen Protokoll-Namen eingeben.';
+      protocolTitleTouched = true;
+      return;
+    }
+    saveError = '';
     activeProtocolId = null;
     activeProtocolCreatedAt = null;
     protocolTitle = '';
@@ -469,6 +476,12 @@
   };
 
   const saveSetup = async () => {
+    if (!protocolTitle.trim()) {
+      saveError = 'Bitte einen Protokoll-Namen eingeben.';
+      protocolTitleTouched = true;
+      return;
+    }
+    saveError = '';
     await persistSettings();
     isDirty = true;
     view = 'main';
@@ -519,6 +532,7 @@
 
     isDirty = false;
     editingEntryId = null;
+    protocolTitleTouched = false;
     view = 'protocol-view';
   };
 
@@ -805,6 +819,7 @@
     await clearSettings();
     entries = [];
     protocolTitle = '';
+    protocolTitleTouched = false;
     projectName = '';
     protocolDate = today();
     protocolDescription = '';
@@ -1311,7 +1326,12 @@
           <input
             bind:value={protocolTitle}
             placeholder="z. B. Tagesprotokoll Baustelle"
-            on:input={() => (isDirty = true)}
+            class:field-error={protocolTitleTouched && !protocolTitle.trim()}
+            on:input={() => {
+              isDirty = true;
+              protocolTitleTouched = true;
+              if (protocolTitle.trim()) saveError = '';
+            }}
           />
         </label>
         <label class="field">
@@ -1450,6 +1470,9 @@
       </div>
       {#if !selectedTemplateId}
         <p class="error">Bitte zuerst ein Tabellenformat auswählen.</p>
+      {/if}
+      {#if saveError}
+        <p class="error">{saveError}</p>
       {/if}
     </section>
   {/if}
