@@ -62,7 +62,7 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
   const rowHeight = 90;
   const cellWidthPx = photoColWidth * 7 + 5;
   const cellHeightPx = rowHeight * (96 / 72);
-  const imageMarginPx = 2;
+  const imageMarginPx = 0;
 
   worksheet.addRow([`Projekt: ${projectName || ''}`]);
   worksheet.addRow([`Datum: ${protocolDate || ''}`]);
