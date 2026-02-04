@@ -58,6 +58,8 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
   const worksheet = workbook.addWorksheet('Protokoll');
 
   const totalCols = 1 + columns.length;
+  const photoColWidth = 24;
+  const rowHeight = 120;
 
   worksheet.addRow([`Projekt: ${projectName || ''}`]);
   worksheet.addRow([`Datum: ${protocolDate || ''}`]);
@@ -90,7 +92,7 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
   worksheet.getColumn(1).width = 6;
   columns.forEach((col, idx) => {
     const columnIndex = idx + 2;
-    worksheet.getColumn(columnIndex).width = col.isPhoto ? 24 : 22;
+    worksheet.getColumn(columnIndex).width = col.isPhoto ? photoColWidth : 22;
   });
 
 
@@ -105,7 +107,7 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
       }
     }
     const row = worksheet.addRow(rowValues);
-    row.height = 120;
+    row.height = rowHeight;
     row.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
 
     columns.forEach((col, idx) => {
@@ -124,11 +126,24 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
         extension
       });
 
-      const insetCol = 0.02;
-      const insetRow = 0.04;
+      const { width: imgW, height: imgH } = await getImageSize(dataUrl);
+      const cellWidthPx = photoColWidth * 7;
+      const cellHeightPx = rowHeight * 1.33;
+      const marginPx = 6;
+      const maxW = Math.max(1, cellWidthPx - marginPx * 2);
+      const maxH = Math.max(1, cellHeightPx - marginPx * 2);
+      const scale = Math.min(maxW / imgW, maxH / imgH, 1);
+      const scaledW = imgW * scale;
+      const scaledH = imgH * scale;
+      const offsetXPx = (cellWidthPx - scaledW) / 2;
+      const offsetYPx = (cellHeightPx - scaledH) / 2;
+      const insetCol = offsetXPx / cellWidthPx;
+      const insetRow = offsetYPx / cellHeightPx;
+      const spanCol = scaledW / cellWidthPx;
+      const spanRow = scaledH / cellHeightPx;
       worksheet.addImage(imageId, {
         tl: { col: photoColIndex - 1 + insetCol, row: row.number - 1 + insetRow },
-        br: { col: photoColIndex - insetCol, row: row.number - insetRow },
+        br: { col: photoColIndex - 1 + insetCol + spanCol, row: row.number - 1 + insetRow + spanRow },
         editAs: 'twoCell'
       });
     }
@@ -173,6 +188,15 @@ function getImageExtension(mime) {
   if (mime.includes('webp')) return 'webp';
   if (mime.includes('heic') || mime.includes('heif')) return 'jpeg';
   return 'jpeg';
+}
+
+function getImageSize(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.width || 1, height: img.height || 1 });
+    img.onerror = () => resolve({ width: 1, height: 1 });
+    img.src = dataUrl;
+  });
 }
 
 function stripDataUrlPrefix(dataUrl) {
