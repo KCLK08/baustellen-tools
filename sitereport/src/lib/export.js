@@ -61,8 +61,10 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
   const marginPx = 6;
   const minCellWidthPx = 160;
   const minCellHeightPx = 110;
-  const pxPerCol = 7;
-  const pxPerRow = 1.33;
+  const colPx = (colWidth) => colWidth * 7 + 5;
+  const rowPx = (rowHeightPts) => rowHeightPts * (96 / 72);
+  const colWidthFromPx = (px) => Math.max(1, Math.round((px - 5) / 7));
+  const rowHeightFromPx = (px) => Math.max(1, Math.round(px / (96 / 72)));
 
   worksheet.addRow([`Projekt: ${projectName || ''}`]);
   worksheet.addRow([`Datum: ${protocolDate || ''}`]);
@@ -91,10 +93,12 @@ async function buildWorkbook({ projectName, protocolDate, protocolDescription, c
     maxImgH = Math.max(maxImgH, height || 0);
   }
   const maxAspect = maxImgH ? maxImgW / maxImgH : 1;
-  const cellHeightPx = Math.max(minCellHeightPx, maxImgH + marginPx * 2);
-  const cellWidthPx = Math.max(minCellWidthPx, cellHeightPx * maxAspect);
-  const photoColWidth = Math.ceil(cellWidthPx / pxPerCol);
-  const rowHeight = Math.ceil(cellHeightPx / pxPerRow);
+  const desiredCellHeightPx = Math.max(minCellHeightPx, maxImgH + marginPx * 2);
+  const desiredCellWidthPx = Math.max(minCellWidthPx, desiredCellHeightPx * maxAspect);
+  const photoColWidth = colWidthFromPx(desiredCellWidthPx);
+  const rowHeight = rowHeightFromPx(desiredCellHeightPx);
+  const cellWidthPx = colPx(photoColWidth);
+  const cellHeightPx = rowPx(rowHeight);
   const headerRowValues = ['Nr.', ...columns.map((col) => col.name)];
 
   worksheet.spliceRows(headerStartRow, 0, headerRowValues);
