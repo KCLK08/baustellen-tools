@@ -720,7 +720,7 @@
       open: true,
       title: 'Protokoll verlassen',
       message: 'Möchtest du die aktuellen Daten speichern oder verwerfen?',
-      primaryLabel: 'Ja',
+      primaryLabel: 'Speichern',
       secondaryLabel: 'Verwerfen',
       onPrimary: async () => {
         const protocolRecord = buildProtocolRecord();
