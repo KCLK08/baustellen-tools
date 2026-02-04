@@ -805,7 +805,9 @@
           return;
         }
       } catch (err) {
-        console.error(err);
+        if (err?.name !== 'NotAllowedError') {
+          console.error(err);
+        }
       }
     }
 
