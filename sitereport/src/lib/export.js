@@ -12,7 +12,7 @@ export async function exportToXlsx({
   columns,
   entries
 }) {
-  const workbook = await buildWorkbook({
+  const { workbook, stats } = await buildWorkbook({
     protocolTitle,
     projectName,
     protocolDate,
@@ -24,11 +24,11 @@ export async function exportToXlsx({
   });
   const buffer = await workbook.xlsx.writeBuffer();
   const filename = buildFilename(projectName, protocolDate);
-  const base64 = bufferToBase64(buffer);
+  const base64 = await bufferToBase64(buffer);
 
   if (isNativePlatform()) {
     await saveXlsxToFiles({ filename, base64Data: base64 });
-    return { filename, base64 };
+    return { filename, base64, stats };
   }
 
   const blob = new Blob([buffer], { type: getXlsxMime() });
@@ -40,7 +40,7 @@ export async function exportToXlsx({
   anchor.click();
 
   URL.revokeObjectURL(url);
-  return { filename, base64 };
+  return { filename, base64, stats };
 }
 
 export async function exportToXlsxData({
@@ -53,7 +53,7 @@ export async function exportToXlsxData({
   columns,
   entries
 }) {
-  const workbook = await buildWorkbook({
+  const { workbook, stats } = await buildWorkbook({
     protocolTitle,
     projectName,
     protocolDate,
@@ -65,8 +65,8 @@ export async function exportToXlsxData({
   });
   const buffer = await workbook.xlsx.writeBuffer();
   const filename = buildFilename(projectName, protocolDate);
-  const base64 = bufferToBase64(buffer);
-  return { filename, base64 };
+  const base64 = await bufferToBase64(buffer);
+  return { filename, base64, stats };
 }
 
 export async function exportToXlsxShare({
@@ -79,7 +79,7 @@ export async function exportToXlsxShare({
   entries,
   shareFn
 }) {
-  const workbook = await buildWorkbook({
+  const { workbook, stats } = await buildWorkbook({
     protocolTitle,
     projectName,
     protocolDate,
@@ -91,10 +91,10 @@ export async function exportToXlsxShare({
   });
   const buffer = await workbook.xlsx.writeBuffer();
   const filename = buildFilename(projectName, protocolDate);
-  const base64 = bufferToBase64(buffer);
+  const base64 = await bufferToBase64(buffer);
 
   await shareFn({ filename, base64Data: base64 });
-  return { filename, base64 };
+  return { filename, base64, stats };
 }
 
 async function buildWorkbook({
@@ -108,6 +108,10 @@ async function buildWorkbook({
   entries
 }) {
   const workbook = new ExcelJS.Workbook();
+  const issues = [];
+  const addIssue = (message) => {
+    if (issues.length < 20) issues.push(message);
+  };
   workbook.creator = 'SiteReport';
   workbook.created = new Date();
 
@@ -148,13 +152,17 @@ async function buildWorkbook({
   const photoCache = new Map();
   let maxImgW = 0;
   let maxImgH = 0;
-  for (const entry of entries) {
+  for (const [idx, entry] of entries.entries()) {
     if (!entry.photoBlob) continue;
-    const dataUrl = await blobToDataUrl(entry.photoBlob);
-    const { width, height } = await getImageSize(dataUrl);
-    photoCache.set(entry.id, { dataUrl, width, height });
-    maxImgW = Math.max(maxImgW, width || 0);
-    maxImgH = Math.max(maxImgH, height || 0);
+    try {
+      const dataUrl = await blobToDataUrl(entry.photoBlob);
+      const { width, height } = await getImageSize(dataUrl);
+      photoCache.set(entry.id, { dataUrl, width, height });
+      maxImgW = Math.max(maxImgW, width || 0);
+      maxImgH = Math.max(maxImgH, height || 0);
+    } catch (err) {
+      addIssue(`Eintrag ${idx + 1}: Bild konnte nicht vorbereitet werden (${err?.message || 'Unbekannt'}).`);
+    }
   }
   const scaleDown = Math.min(
     maxCellWidthPx / (maxImgW || maxCellWidthPx),
@@ -264,7 +272,7 @@ async function buildWorkbook({
 
 
   let rowNumber = 1;
-  for (const entry of entries) {
+  for (const [idx, entry] of entries.entries()) {
     const rowValues = [rowNumber];
     for (const col of columns) {
       if (!col.isPhoto) {
@@ -289,46 +297,48 @@ async function buildWorkbook({
     }
 
     if (photoColIndex && entry.photoBlob) {
-      const cached = photoCache.get(entry.id);
-      const dataUrl = cached?.dataUrl || (await blobToDataUrl(entry.photoBlob));
-      const base64 = stripDataUrlPrefix(dataUrl);
-      const extension = getImageExtension(entry.photoBlob.type);
-      const imageId = workbook.addImage({
-        base64,
-        extension
-      });
+      try {
+        const cached = photoCache.get(entry.id);
+        const dataUrl = cached?.dataUrl || (await blobToDataUrl(entry.photoBlob));
+        const base64 = stripDataUrlPrefix(dataUrl);
+        const extension = getImageExtension(entry.photoBlob.type);
+        const imageId = workbook.addImage({
+          base64,
+          extension
+        });
 
-      const imgW = cached?.width || 1;
-      const imgH = cached?.height || 1;
-      const maxW = Math.max(1, cellWidthPx);
-      const maxH = Math.max(1, cellHeightPx);
-      let scale = Math.min(maxW / imgW, maxH / imgH);
-      if (!Number.isFinite(scale) || scale <= 0) {
-        scale = 1;
+        const imgW = cached?.width || 1;
+        const imgH = cached?.height || 1;
+        const maxW = Math.max(1, cellWidthPx);
+        const maxH = Math.max(1, cellHeightPx);
+        let scale = Math.min(maxW / imgW, maxH / imgH);
+        if (!Number.isFinite(scale) || scale <= 0) {
+          scale = 1;
+        }
+        const scaledW = imgW * scale;
+        const scaledH = imgH * scale;
+        const colWidthUnits =
+          worksheet.getColumn(photoColIndex).isCustomWidth && worksheet.getColumn(photoColIndex).width
+            ? Math.floor(worksheet.getColumn(photoColIndex).width * 10000)
+            : 640000;
+        const rowHeightUnits = row.height ? Math.floor(row.height * 10000) : 180000;
+        const imageFracW = Math.min(1, scaledW / cellWidthPx);
+        const imageFracH = Math.min(1, scaledH / cellHeightPx);
+        const colOff = Math.round(((1 - imageFracW) / 2) * colWidthUnits);
+        const rowOff = Math.round(((1 - imageFracH) / 2) * rowHeightUnits);
+        worksheet.addImage(imageId, {
+          tl: {
+            nativeCol: photoColIndex - 1,
+            nativeRow: row.number - 1,
+            nativeColOff: colOff,
+            nativeRowOff: rowOff
+          },
+          ext: { width: Math.max(1, scaledW), height: Math.max(1, scaledH) },
+          editAs: 'oneCell'
+        });
+      } catch (err) {
+        addIssue(`Eintrag ${idx + 1}: Bild konnte nicht eingebettet werden (${err?.message || 'Unbekannt'}).`);
       }
-      const scaledW = imgW * scale;
-      const scaledH = imgH * scale;
-      const offsetXPx = (cellWidthPx - scaledW) / 2;
-      const offsetYPx = (cellHeightPx - scaledH) / 2;
-      const colWidthUnits =
-        worksheet.getColumn(photoColIndex).isCustomWidth && worksheet.getColumn(photoColIndex).width
-          ? Math.floor(worksheet.getColumn(photoColIndex).width * 10000)
-          : 640000;
-      const rowHeightUnits = row.height ? Math.floor(row.height * 10000) : 180000;
-      const imageFracW = Math.min(1, scaledW / cellWidthPx);
-      const imageFracH = Math.min(1, scaledH / cellHeightPx);
-      const colOff = Math.round(((1 - imageFracW) / 2) * colWidthUnits);
-      const rowOff = Math.round(((1 - imageFracH) / 2) * rowHeightUnits);
-      worksheet.addImage(imageId, {
-        tl: {
-          nativeCol: photoColIndex - 1,
-          nativeRow: row.number - 1,
-          nativeColOff: colOff,
-          nativeRowOff: rowOff
-        },
-        ext: { width: Math.max(1, scaledW), height: Math.max(1, scaledH) },
-        editAs: 'oneCell'
-      });
     }
     rowNumber += 1;
   }
@@ -351,7 +361,15 @@ async function buildWorkbook({
     }
   }
 
-  return workbook;
+  return {
+    workbook,
+    stats: {
+      format: 'xlsx',
+      requestedEntries: entries.length,
+      exportedEntries: entries.length,
+      issues
+    }
+  };
 }
 
 function sanitizeFilename(name) {

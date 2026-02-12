@@ -16,6 +16,10 @@ export async function exportToPdfData({
   entries
 }) {
   const pdfDoc = await PDFDocument.create();
+  const issues = [];
+  const addIssue = (message) => {
+    if (issues.length < 20) issues.push(message);
+  };
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
@@ -166,12 +170,19 @@ export async function exportToPdfData({
     let imageIsPlaceholder = false;
 
     if (entry.photoBlob) {
-      const dataUrl = await blobToDataUrl(entry.photoBlob);
-      const { bytes, extension } = dataUrlToBytes(dataUrl);
-      image = extension === 'png' ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
-      const scale = Math.min(blockWidth / image.width, imageMaxHeight / image.height, 1);
-      imageWidth = image.width * scale;
-      imageHeight = image.height * scale;
+      try {
+        const dataUrl = await blobToDataUrl(entry.photoBlob);
+        const { bytes, extension } = dataUrlToBytes(dataUrl);
+        image = extension === 'png' ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
+        const scale = Math.min(blockWidth / image.width, imageMaxHeight / image.height, 1);
+        imageWidth = image.width * scale;
+        imageHeight = image.height * scale;
+      } catch (err) {
+        imageIsPlaceholder = true;
+        imageWidth = blockWidth;
+        imageHeight = placeholderHeight;
+        addIssue(`Eintrag ${index + 1}: Bild konnte nicht eingebettet werden (${err?.message || 'Unbekannt'}).`);
+      }
     } else {
       imageIsPlaceholder = true;
       imageWidth = blockWidth;
@@ -331,14 +342,29 @@ export async function exportToPdfData({
   };
 
   await startPage();
+  let exportedEntries = 0;
   for (const [idx, entry] of entries.entries()) {
-    await drawEntry(entry, idx);
+    try {
+      await drawEntry(entry, idx);
+      exportedEntries += 1;
+    } catch (err) {
+      addIssue(`Eintrag ${idx + 1}: PDF-Block konnte nicht erstellt werden (${err?.message || 'Unbekannt'}).`);
+    }
   }
 
   const pdfBytes = await pdfDoc.save();
   const filename = buildPdfFilename(projectName, protocolDate);
-  const base64 = bufferToBase64(pdfBytes);
-  return { filename, base64 };
+  const base64 = await bufferToBase64(pdfBytes);
+  return {
+    filename,
+    base64,
+    stats: {
+      format: 'pdf',
+      requestedEntries: entries.length,
+      exportedEntries,
+      issues
+    }
+  };
 }
 
 function dataUrlToBytes(dataUrl) {

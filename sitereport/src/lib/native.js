@@ -27,13 +27,22 @@ export async function shareXlsx({ filename, base64Data }) {
   });
 }
 
-export function bufferToBase64(buffer) {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
+export async function bufferToBase64(buffer) {
+  const blob = new Blob([buffer], { type: 'application/octet-stream' });
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      const commaIndex = dataUrl.indexOf(',');
+      if (commaIndex === -1) {
+        reject(new Error('Base64-Konvertierung fehlgeschlagen.'));
+        return;
+      }
+      resolve(dataUrl.slice(commaIndex + 1));
+    };
+    reader.onerror = () => reject(reader.error || new Error('Base64-Konvertierung fehlgeschlagen.'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 export function getXlsxMime() {

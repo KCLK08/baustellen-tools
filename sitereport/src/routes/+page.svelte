@@ -686,13 +686,68 @@
     };
   };
 
-  const saveAndExportProtocol = async () => {
+  const toExportFeedback = (label, result) => {
+    if (!result) return `${label}-Export nicht verfügbar.`;
+    const stats = result.stats;
+    if (!stats) return `${label} exportiert.`;
+    const requested = Number(stats.requestedEntries ?? 0);
+    const exported = Number(stats.exportedEntries ?? requested);
+    const issues = Array.isArray(stats.issues) ? stats.issues.filter(Boolean) : [];
+    if (requested > exported) {
+      const reason = issues[0] || 'Unbekannter Fehler bei einzelnen Einträgen.';
+      return `${label}: ${exported}/${requested} Einträge exportiert. Grund: ${reason}`;
+    }
+    if (issues.length > 0) {
+      return `${label}: ${exported}/${requested} Einträge exportiert. Hinweis: ${issues[0]}`;
+    }
+    return `${label}: ${exported}/${requested} Einträge exportiert.`;
+  };
+
+  const showExportFeedback = (label, result) => {
+    const message = toExportFeedback(label, result);
+    showToast(message);
+    if (result?.stats?.requestedEntries > result?.stats?.exportedEntries || (result?.stats?.issues || []).length > 0) {
+      downloadError = message;
+    }
+  };
+
+  const buildExportPatch = ({ protocolRecord, xlsxResult, pdfResult, now }) => {
+    const patch = {
+      id: `export_${protocolRecord.id}`,
+      protocolId: protocolRecord.id,
+      createdAt: protocolRecord.createdAt,
+      updatedAt: now,
+      projectName: protocolRecord.projectName,
+      protocolDate: protocolRecord.protocolDate
+    };
+    if (xlsxResult) {
+      patch.filename = xlsxResult.filename || buildFilename(protocolRecord.projectName, protocolRecord.protocolDate);
+      patch.base64 = xlsxResult.base64 || '';
+      patch.xlsxStats = xlsxResult.stats || null;
+    }
+    if (pdfResult) {
+      patch.pdfFilename = pdfResult.filename || buildFilename(protocolRecord.projectName, protocolRecord.protocolDate).replace(/\.xlsx$/i, '.pdf');
+      patch.pdfBase64 = pdfResult.base64 || '';
+      patch.pdfUpdatedAt = now;
+      patch.pdfStats = pdfResult.stats || null;
+    }
+    return patch;
+  };
+
+  const saveProtocol = async () => {
     const protocolRecord = buildProtocolRecord();
     await addProtocol(protocolRecord);
     isDirty = false;
+    return protocolRecord;
+  };
 
-    const [xlsxResult, pdfResult] = await Promise.all([
-      exportToXlsxData({
+  const saveAndExportProtocol = async ({ format } = {}) => {
+    const protocolRecord = await saveProtocol();
+    let xlsxResult = null;
+    let pdfResult = null;
+
+    if (format === 'xlsx') {
+      xlsxResult = await exportToXlsxData({
         protocolTitle: protocolRecord.protocolTitle,
         projectName: protocolRecord.projectName,
         protocolDate: protocolRecord.protocolDate,
@@ -701,8 +756,10 @@
         logoDataUrl,
         columns: protocolRecord.columns,
         entries: protocolRecord.entries
-      }),
-      exportToPdfData({
+      });
+    }
+    if (format === 'pdf') {
+      pdfResult = await exportToPdfData({
         protocolTitle: protocolRecord.protocolTitle,
         projectName: protocolRecord.projectName,
         protocolDate: protocolRecord.protocolDate,
@@ -711,28 +768,15 @@
         logoDataUrl,
         columns: protocolRecord.columns,
         entries: protocolRecord.entries
-      })
-    ]);
-
-    const now = new Date().toISOString();
-    let exportRecord = null;
-    if (xlsxResult || pdfResult) {
-      exportRecord = await upsertExportByProtocol({
-        id: `export_${protocolRecord.id}`,
-        protocolId: protocolRecord.id,
-        createdAt: protocolRecord.createdAt,
-        updatedAt: now,
-        filename: xlsxResult?.filename || '',
-        base64: xlsxResult?.base64 || '',
-        pdfFilename: pdfResult?.filename || '',
-        pdfBase64: pdfResult?.base64 || '',
-        pdfUpdatedAt: now,
-        projectName: protocolRecord.projectName,
-        protocolDate: protocolRecord.protocolDate
       });
     }
 
-    return { protocolRecord, exportRecord };
+    let exportRecord = null;
+    if (xlsxResult || pdfResult) {
+      const now = new Date().toISOString();
+      exportRecord = await upsertExportByProtocol(buildExportPatch({ protocolRecord, xlsxResult, pdfResult, now }));
+    }
+    return { protocolRecord, exportRecord, xlsxResult, pdfResult };
   };
 
   const closeProtocol = () => {
@@ -759,11 +803,10 @@
         if (isExporting) return;
         isExporting = true;
         try {
-          const { exportRecord } = await saveAndExportProtocol();
+          const { exportRecord } = await saveAndExportProtocol({ format: 'xlsx' });
           protocolsList = await listProtocols();
           exportsList = await listExports();
           if (exportRecord) await downloadExportExcel(exportRecord);
-          showToast('Gespeichert');
           await resetProtocol();
           view = 'protocols';
           closeConfirm();
@@ -778,11 +821,10 @@
         if (isExporting) return;
         isExporting = true;
         try {
-          const { exportRecord } = await saveAndExportProtocol();
+          const { exportRecord } = await saveAndExportProtocol({ format: 'pdf' });
           protocolsList = await listProtocols();
           exportsList = await listExports();
           if (exportRecord) await downloadExportPdf(exportRecord);
-          showToast('Gespeichert');
           await resetProtocol();
           view = 'protocols';
           closeConfirm();
@@ -797,7 +839,7 @@
         if (isExporting) return;
         isExporting = true;
         try {
-          await saveAndExportProtocol();
+          await saveProtocol();
           protocolsList = await listProtocols();
           exportsList = await listExports();
           showToast('Gespeichert');
@@ -846,46 +888,7 @@
       showCancel: true,
       secondaryDanger: true,
       onPrimary: async () => {
-        const protocolRecord = buildProtocolRecord();
-        await addProtocol(protocolRecord);
-        const [xlsxResult, pdfResult] = await Promise.all([
-          exportToXlsxData({
-            protocolTitle: protocolRecord.protocolTitle,
-            projectName: protocolRecord.projectName,
-            protocolDate: protocolRecord.protocolDate,
-            protocolDescription: protocolRecord.protocolDescription,
-            attendees: protocolRecord.attendees,
-            logoDataUrl,
-            columns: protocolRecord.columns,
-            entries: protocolRecord.entries
-          }),
-          exportToPdfData({
-            protocolTitle: protocolRecord.protocolTitle,
-            projectName: protocolRecord.projectName,
-            protocolDate: protocolRecord.protocolDate,
-            protocolDescription: protocolRecord.protocolDescription,
-            attendees: protocolRecord.attendees,
-            logoDataUrl,
-            columns: protocolRecord.columns,
-            entries: protocolRecord.entries
-          })
-        ]);
-        const now = new Date().toISOString();
-        if (xlsxResult || pdfResult) {
-          await upsertExportByProtocol({
-            id: `export_${protocolRecord.id}`,
-            protocolId: protocolRecord.id,
-            createdAt: protocolRecord.createdAt,
-            updatedAt: now,
-            filename: xlsxResult?.filename || '',
-            base64: xlsxResult?.base64 || '',
-            pdfFilename: pdfResult?.filename || '',
-            pdfBase64: pdfResult?.base64 || '',
-            pdfUpdatedAt: now,
-            projectName: protocolRecord.projectName,
-            protocolDate: protocolRecord.protocolDate
-          });
-        }
+        await saveProtocol();
         protocolsList = await listProtocols();
         exportsList = await listExports();
         await resetProtocol();
@@ -906,6 +909,30 @@
     toastTimer = setTimeout(() => {
       toastMessage = '';
     }, 2000);
+  };
+
+  const base64ToUint8Array = (base64) => {
+    const clean = String(base64 || '').replace(/\s+/g, '');
+    const chunkSize = 32768; // multiple of 4 for safe base64 slicing
+    const chunks = [];
+    let total = 0;
+    for (let offset = 0; offset < clean.length; offset += chunkSize) {
+      const slice = clean.slice(offset, offset + chunkSize);
+      const byteString = atob(slice);
+      const bytes = new Uint8Array(byteString.length);
+      for (let i = 0; i < byteString.length; i += 1) {
+        bytes[i] = byteString.charCodeAt(i);
+      }
+      chunks.push(bytes);
+      total += bytes.length;
+    }
+    const merged = new Uint8Array(total);
+    let position = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, position);
+      position += chunk.length;
+    }
+    return merged;
   };
 
   const closeConfirm = () => {
@@ -956,12 +983,13 @@
       return;
     }
     downloadError = '';
-    const byteString = atob(base64);
-    const bytes = new Uint8Array(byteString.length);
-    for (let i = 0; i < byteString.length; i += 1) {
-      bytes[i] = byteString.charCodeAt(i);
+    let blob;
+    try {
+      blob = new Blob([base64ToUint8Array(base64)], { type: mimeType });
+    } catch (err) {
+      downloadError = `Datei konnte nicht decodiert werden: ${err?.message || 'Unbekannt'}`;
+      return;
     }
-    const blob = new Blob([bytes], { type: mimeType });
 
     let shared = false;
     if (navigator?.share) {
@@ -981,34 +1009,81 @@
       setTimeout(() => URL.revokeObjectURL(url), 4000);
       return;
     }
-    if (isAndroid()) {
-      window.location.href = url;
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      return;
-    }
 
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.rel = 'noopener';
-    anchor.target = '_blank';
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    try {
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.rel = 'noopener';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    } catch {
+      // Fallback for environments that block synthetic download clicks.
+      window.open(url, '_blank', 'noopener');
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
   };
 
-  const downloadExportExcel = async (exp) => {
-    const filename = exp.filename || buildFilename(exp.projectName, exp.protocolDate);
+  const ensureExcelExport = async (protocol) => {
+    if (!protocol) return { record: null, result: null };
+    const xlsxResult = await exportToXlsxData({
+      protocolTitle: protocol.protocolTitle,
+      projectName: protocol.projectName,
+      protocolDate: protocol.protocolDate,
+      protocolDescription: protocol.protocolDescription,
+      attendees: protocol.attendees,
+      logoDataUrl,
+      columns: protocol.columns,
+      entries: protocol.entries
+    });
+    if (!xlsxResult) return { record: null, result: null };
+    const now = new Date().toISOString();
+    const record = await upsertExportByProtocol(
+      buildExportPatch({
+        protocolRecord: protocol,
+        xlsxResult,
+        pdfResult: null,
+        now
+      })
+    );
+    return { record, result: xlsxResult };
+  };
+
+  const downloadExportExcel = async (exp, protocol) => {
+    let target = exp;
+    let xlsxResult = null;
+    if (!target?.base64) {
+      const protocolRecord = protocol || (exp?.protocolId ? await getProtocol(exp.protocolId) : null);
+      if (!protocolRecord) {
+        downloadError = 'Download nicht verfügbar.';
+        return;
+      }
+      const generated = await ensureExcelExport(protocolRecord);
+      target = generated.record;
+      xlsxResult = generated.result;
+      exportsList = await listExports();
+    }
+    if (!target?.base64) {
+      downloadError = 'Download nicht verfügbar.';
+      return;
+    }
+    const filename = target.filename || buildFilename(target.projectName, target.protocolDate);
     await downloadFileFromBase64({
-      base64: exp.base64,
+      base64: target.base64,
       filename,
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     });
+    if (xlsxResult) {
+      showExportFeedback('Excel', xlsxResult);
+    } else if (target.xlsxStats) {
+      showExportFeedback('Excel', { stats: target.xlsxStats });
+    }
   };
 
-  const ensurePdfExport = async (protocol, existing) => {
-    if (!protocol) return null;
+  const ensurePdfExport = async (protocol) => {
+    if (!protocol) return { record: null, result: null };
     const pdfResult = await exportToPdfData({
       protocolTitle: protocol.protocolTitle,
       projectName: protocol.projectName,
@@ -1019,32 +1094,31 @@
       columns: protocol.columns,
       entries: protocol.entries
     });
-    if (!pdfResult) return null;
+    if (!pdfResult) return { record: null, result: null };
     const now = new Date().toISOString();
-    return upsertExportByProtocol({
-      id: `export_${protocol.id}`,
-      protocolId: protocol.id,
-      createdAt: protocol.createdAt,
-      updatedAt: now,
-      filename: existing?.filename || buildFilename(protocol.projectName, protocol.protocolDate),
-      base64: existing?.base64 || '',
-      pdfFilename: pdfResult.filename,
-      pdfBase64: pdfResult.base64,
-      pdfUpdatedAt: now,
-      projectName: protocol.projectName,
-      protocolDate: protocol.protocolDate
-    });
+    const record = await upsertExportByProtocol(
+      buildExportPatch({
+        protocolRecord: protocol,
+        xlsxResult: null,
+        pdfResult,
+        now
+      })
+    );
+    return { record, result: pdfResult };
   };
 
   const downloadExportPdf = async (exp, protocol) => {
     let target = exp;
+    let pdfResult = null;
     if (!target?.pdfBase64) {
       const protocolRecord = protocol || (exp?.protocolId ? await getProtocol(exp.protocolId) : null);
       if (!protocolRecord) {
         downloadError = 'Download nicht verfügbar.';
         return;
       }
-      target = await ensurePdfExport(protocolRecord, exp);
+      const generated = await ensurePdfExport(protocolRecord);
+      target = generated.record;
+      pdfResult = generated.result;
       exportsList = await listExports();
     }
     if (!target?.pdfBase64) {
@@ -1054,68 +1128,33 @@
     const filename =
       target.pdfFilename || buildFilename(target.projectName, target.protocolDate).replace(/\.xlsx$/i, '.pdf');
     await downloadFileFromBase64({ base64: target.pdfBase64, filename, mimeType: 'application/pdf' });
+    if (pdfResult) {
+      showExportFeedback('PDF', pdfResult);
+    } else if (target.pdfStats) {
+      showExportFeedback('PDF', { stats: target.pdfStats });
+    }
   };
 
   const downloadProtocolExport = async (protocol) => {
     let exp = exportsList.find((e) => e.protocolId === protocol.id);
     if (!exp) {
-      const result = await exportToXlsxData({
-        protocolTitle: protocol.protocolTitle,
-        projectName: protocol.projectName,
-        protocolDate: protocol.protocolDate,
-        protocolDescription: protocol.protocolDescription,
-        attendees: protocol.attendees,
-        logoDataUrl,
-        columns: protocol.columns,
-        entries: protocol.entries
-      });
-      if (result) {
-        exp = await upsertExportByProtocol({
-          id: `export_${protocol.id}`,
-          protocolId: protocol.id,
-          createdAt: protocol.createdAt,
-          updatedAt: new Date().toISOString(),
-          filename: result.filename,
-          base64: result.base64,
-          projectName: protocol.projectName,
-          protocolDate: protocol.protocolDate
-        });
+      const generated = await ensureExcelExport(protocol);
+      if (generated.record) {
+        exp = generated.record;
         exportsList = await listExports();
       }
     }
     if (exp) {
-      await downloadExportExcel(exp);
+      await downloadExportExcel(exp, protocol);
     }
   };
 
   const downloadProtocolPdf = async (protocol) => {
     let exp = exportsList.find((e) => e.protocolId === protocol.id);
     if (!exp?.pdfBase64) {
-      const pdfResult = await exportToPdfData({
-        protocolTitle: protocol.protocolTitle,
-        projectName: protocol.projectName,
-        protocolDate: protocol.protocolDate,
-        protocolDescription: protocol.protocolDescription,
-        attendees: protocol.attendees,
-        logoDataUrl,
-        columns: protocol.columns,
-        entries: protocol.entries
-      });
-      if (pdfResult) {
-        const now = new Date().toISOString();
-        exp = await upsertExportByProtocol({
-          id: `export_${protocol.id}`,
-          protocolId: protocol.id,
-          createdAt: protocol.createdAt,
-          updatedAt: now,
-          filename: exp?.filename || buildFilename(protocol.projectName, protocol.protocolDate),
-          base64: exp?.base64 || '',
-          pdfFilename: pdfResult.filename,
-          pdfBase64: pdfResult.base64,
-          pdfUpdatedAt: now,
-          projectName: protocol.projectName,
-          protocolDate: protocol.protocolDate
-        });
+      const generated = await ensurePdfExport(protocol);
+      if (generated.record) {
+        exp = generated.record;
         exportsList = await listExports();
       }
     }
@@ -1264,9 +1303,6 @@
     return window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator?.standalone;
   }
 
-  function isAndroid() {
-    return /Android/i.test(navigator.userAgent || '');
-  }
 </script>
 
 <svelte:window on:pointermove={movePointerDrag} on:pointerup={endPointerDrag} on:pointercancel={endPointerDrag} />
