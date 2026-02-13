@@ -28,6 +28,7 @@
   import { compressImage, blobToObjectUrl } from '$lib/image';
   import { exportToXlsxData } from '$lib/export';
   import { exportToPdfData } from '$lib/pdf';
+  import { getNativePlatform, isNativePlatform, saveBase64File, shareFile } from '$lib/native';
 
   const generateId = () => `col_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const withColumnIds = (cols) => cols.map((col) => ({ id: col.id ?? generateId(), ...col }));
@@ -1002,6 +1003,41 @@
       return;
     }
     downloadError = '';
+
+    const native = isNativePlatform();
+    const nativePlatform = native ? getNativePlatform() : 'web';
+    const isIosWebClient = () => {
+      const ua = navigator?.userAgent || '';
+      const platform = navigator?.platform || '';
+      const touchPoints = Number(navigator?.maxTouchPoints || 0);
+      return /iPad|iPhone|iPod/i.test(ua) || (platform === 'MacIntel' && touchPoints > 1);
+    };
+
+    if (nativePlatform === 'ios') {
+      try {
+        const uri = await saveBase64File({ filename, base64Data: base64 });
+        await shareFile({
+          uri,
+          title: filename,
+          text: 'Baustellen-Protokoll',
+          dialogTitle: 'Datei teilen'
+        });
+        return;
+      } catch (err) {
+        console.error(err);
+        // Fall back to browser flow below for environments where native sharing is unavailable.
+      }
+    } else if (nativePlatform === 'android') {
+      try {
+        await saveBase64File({ filename, base64Data: base64 });
+        showToast(`${filename} gespeichert`);
+        return;
+      } catch (err) {
+        console.error(err);
+        // Fall back to browser flow below.
+      }
+    }
+
     let blob;
     try {
       blob = new Blob([base64ToUint8Array(base64)], { type: mimeType });
@@ -1011,7 +1047,8 @@
     }
 
     let shared = false;
-    if (navigator?.share) {
+    const shouldUseWebShare = !native && isIosWebClient() && !!navigator?.share;
+    if (shouldUseWebShare) {
       try {
         const file = new File([blob], filename, { type: blob.type });
         if (!navigator?.canShare || navigator.canShare({ files: [file] })) {

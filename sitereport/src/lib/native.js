@@ -8,22 +8,67 @@ export function isNativePlatform() {
   return Capacitor.isNativePlatform();
 }
 
+export function getNativePlatform() {
+  return Capacitor.getPlatform();
+}
+
 export async function saveXlsxToFiles({ filename, base64Data }) {
-  const result = await Filesystem.writeFile({
-    path: filename,
-    data: base64Data,
-    directory: Directory.Documents
-  });
-  return result.uri;
+  return saveBase64File({ filename, base64Data });
 }
 
 export async function shareXlsx({ filename, base64Data }) {
-  const uri = await saveXlsxToFiles({ filename, base64Data });
-  await Share.share({
+  const uri = await saveBase64File({ filename, base64Data });
+  await shareFile({
+    uri,
     title: filename,
     text: 'Baustellen-Protokoll',
-    url: uri,
     dialogTitle: 'Protokoll teilen'
+  });
+}
+
+export async function saveBase64File({ filename, base64Data }) {
+  const cleanedData = String(base64Data || '').replace(/\s+/g, '');
+  const path = `SiteReport/${filename}`;
+
+  if (Capacitor.getPlatform() === 'android') {
+    try {
+      const current = await Filesystem.checkPermissions();
+      if (current?.publicStorage && current.publicStorage !== 'granted') {
+        await Filesystem.requestPermissions();
+      }
+    } catch {
+      // ignore permission API errors on platforms where this is not required
+    }
+  }
+
+  try {
+    const result = await Filesystem.writeFile({
+      path,
+      data: cleanedData,
+      directory: Directory.Documents,
+      recursive: true
+    });
+    return result.uri;
+  } catch (err) {
+    if (Capacitor.getPlatform() === 'android') {
+      throw err;
+    }
+    const fallback = await Filesystem.writeFile({
+      path,
+      data: cleanedData,
+      directory: Directory.Cache,
+      recursive: true
+    });
+    return fallback.uri;
+  }
+}
+
+export async function shareFile({ uri, title, text = 'Baustellen-Protokoll', dialogTitle = 'Datei teilen' }) {
+  await Share.share({
+    title,
+    text,
+    url: uri,
+    dialogTitle
   });
 }
 
