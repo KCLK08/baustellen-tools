@@ -464,15 +464,34 @@
     saveError = '';
     activeProtocolId = null;
     activeProtocolCreatedAt = null;
-    protocolTitle = '';
-    projectName = '';
-    protocolDescription = '';
-    attendees = '';
     await clearEntries();
     entries = [];
     await persistSettings();
     isDirty = false;
     view = 'main';
+  };
+
+  const startNewProtocolSetup = async () => {
+    await clearEntries();
+    entries = [];
+    activeProtocolId = null;
+    activeProtocolCreatedAt = null;
+    protocolTitle = '';
+    protocolTitleTouched = false;
+    projectName = '';
+    protocolDate = today();
+    protocolDescription = '';
+    attendees = '';
+    editingEntryId = null;
+    entryDraft = { fields: {}, photoFile: null, photoPreview: '' };
+    stepIndex = 0;
+    entrySteps = [];
+    currentField = null;
+    saveError = '';
+    closeError = '';
+    downloadError = '';
+    isDirty = false;
+    view = 'start';
   };
 
   const saveSetup = async () => {
@@ -1341,7 +1360,7 @@
       <h2>Protokoll starten</h2>
       <p class="muted">Lege einen neuen Vorgang an oder öffne bestehende Protokolle.</p>
       <div class="cta-row">
-        <button class="primary full-width" type="button" on:click={() => (view = 'start')}>
+        <button class="primary full-width" type="button" on:click={startNewProtocolSetup}>
           Neues Protokoll starten
         </button>
       </div>
