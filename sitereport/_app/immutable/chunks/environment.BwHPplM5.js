@@ -1,0 +1,1 @@
+var s;const t=((s=globalThis.__sveltekit_p7az3s)==null?void 0:s.base)??"/buew-toolbox/sitereport";var e;const a=((e=globalThis.__sveltekit_p7az3s)==null?void 0:e.assets)??t,o="1774303090144";export{a,t as b,o as v};
